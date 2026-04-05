@@ -1,13 +1,9 @@
 const API = "/api";
 
-// LOADING (optional kalau nanti kamu tambahin)
-window.addEventListener("load", ()=>{});
-
 // ANIMASI ANGKA
 function animate(el, end){
   end = Number(end) || 0;
 
-  let start = 0;
   let duration = 1200;
   let startTime = null;
 
@@ -49,7 +45,7 @@ loadStats();
 setInterval(loadStats, 5000);
 
 // BUTTON EFFECT
-document.querySelectorAll(".button, .qr-btn").forEach(btn=>{
+document.querySelectorAll(".button, .qr").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     btn.style.transform="scale(.9)";
     setTimeout(()=>btn.style.transform="scale(1)",150);
@@ -73,5 +69,6 @@ document.addEventListener("mousemove",(e)=>{
 let x=(window.innerWidth/2 - e.clientX)/25;
 let y=(window.innerHeight/2 - e.clientY)/25;
 
-avatar.style.transform=`rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
+avatar.style.transform=
+`rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
 });
