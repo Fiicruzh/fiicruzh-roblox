@@ -1,47 +1,12 @@
 body{
 margin:0;
 font-family:Orbitron;
+background:black;
 color:white;
-background:black;
-overflow-x:hidden;
+overflow:hidden;
 }
 
-/* 🔥 LOADING */
-.loading{
-position:fixed;
-width:100%;
-height:100%;
-background:black;
-display:flex;
-justify-content:center;
-align-items:center;
-z-index:999;
-animation:fadeOut 2.5s forwards 2s;
-}
-
-.loader-box{
-text-align:center;
-color:cyan;
-}
-
-.loader-line{
-width:200px;
-height:3px;
-background:cyan;
-margin:auto;
-animation:load 2s linear infinite;
-}
-
-@keyframes load{
-0%{width:0}
-100%{width:200px}
-}
-
-@keyframes fadeOut{
-to{opacity:0;visibility:hidden;}
-}
-
-/* BACKGROUND */
+/* BG */
 .bg{
 position:fixed;
 width:100%;
@@ -51,120 +16,113 @@ filter:brightness(.3);
 z-index:-3;
 }
 
-/* 🔥 SCANLINE */
+/* SCANLINE */
 .scanline{
 position:fixed;
 width:100%;
 height:100%;
-background:repeating-linear-gradient(
-0deg,
-rgba(255,255,255,0.03) 0px,
-rgba(255,255,255,0.03) 1px,
-transparent 2px
-);
+background:repeating-linear-gradient(0deg,rgba(255,255,255,.03)1px,transparent 2px);
 animation:scan 6s linear infinite;
 z-index:-2;
 }
 
 @keyframes scan{
-0%{background-position:0 0}
-100%{background-position:0 100%}
+to{background-position:0 100%;}
 }
 
-/* 🔥 HUD LINES */
-.hud-lines{
+/* HUD */
+.hud{
 position:fixed;
 width:100%;
 height:100%;
 background:
-linear-gradient(90deg, transparent 49%, rgba(0,255,255,0.1) 50%, transparent 51%),
-linear-gradient(transparent 49%, rgba(0,255,255,0.1) 50%, transparent 51%);
+linear-gradient(90deg,transparent 49%,rgba(0,255,255,.1)50%,transparent 51%),
+linear-gradient(transparent 49%,rgba(0,255,255,.1)50%,transparent 51%);
 background-size:80px 80px;
-animation:hudMove 10s linear infinite;
+animation:hud 10s linear infinite;
 z-index:-1;
 }
 
-@keyframes hudMove{
-from{background-position:0 0}
-to{background-position:80px 80px}
-}
-
-/* CONTAINER */
-.container{
-display:flex;
-flex-direction:column;
-align-items:center;
-justify-content:center;
-min-height:100vh;
-padding:20px;
-}
-
-/* DASHBOARD */
-.dashboard{
-display:flex;
-gap:40px;
-flex-wrap:wrap;
-justify-content:center;
-align-items:center;
-}
-
-/* PANEL */
-.left-panel,.right-panel{
-max-width:350px;
-width:100%;
+@keyframes hud{
+to{background-position:80px 80px;}
 }
 
 /* CARD */
-.profile-card,.avatar-box{
-background:rgba(0,0,0,.6);
+.container{
+display:flex;
+justify-content:center;
+align-items:center;
+min-height:100vh;
+}
+
+.card{
+width:360px;
 padding:25px;
+background:rgba(0,0,0,.65);
 border-radius:20px;
 border:1px solid cyan;
-box-shadow:0 0 40px cyan;
-backdrop-filter:blur(10px);
-transition:.4s;
+box-shadow:0 0 60px cyan;
+text-align:center;
 }
 
-.profile-card:hover,.avatar-box:hover{
-transform:translateY(-10px);
-box-shadow:0 0 70px cyan;
-}
-
-/* PROFILE */
-.profile-top{
+/* HEADER */
+.header{
 display:flex;
 align-items:center;
-gap:15px;
+gap:12px;
 }
 
 .profile{
-width:80px;
-height:80px;
+width:65px;
+height:65px;
 border-radius:50%;
 box-shadow:0 0 20px cyan;
 }
 
-.name-box h1{
-margin:0;
-font-size:24px;
+/* AVATAR */
+.avatar-box{
+position:relative;
+margin-top:20px;
 }
 
-.name-box p{
-margin:0;
-color:cyan;
+#avatar{
+width:200px;
+filter:drop-shadow(0 0 20px cyan);
+}
+
+/* SCAN */
+.scan{
+position:absolute;
+width:100%;
+height:4px;
+background:cyan;
+animation:scanMove 2s infinite linear;
+}
+
+@keyframes scanMove{
+0%{top:0}
+100%{top:100%}
+}
+
+/* ID */
+.roblox-id{
+margin-top:15px;
+padding:10px;
+border-radius:10px;
+background:rgba(0,255,255,.1);
+box-shadow:0 0 20px cyan;
 }
 
 /* STATS */
 .stats{
 display:flex;
 gap:10px;
-margin-top:20px;
+margin-top:15px;
 }
 
 .stat{
 flex:1;
-text-align:center;
-background:rgba(0,255,255,.15);
+background:rgba(0,255,255,.1);
 padding:12px;
 border-radius:10px;
 transition:.3s;
@@ -173,6 +131,12 @@ transition:.3s;
 .stat:hover{
 transform:scale(1.1);
 box-shadow:0 0 20px cyan;
+}
+
+/* TAG */
+.tagline{
+color:cyan;
+margin-top:15px;
 }
 
 /* ICON */
@@ -184,64 +148,73 @@ margin-top:15px;
 }
 
 .icons a{
-font-size:24px;
+font-size:22px;
 color:cyan;
 transition:.3s;
 }
 
 .icons a:hover{
-transform:scale(1.4) rotate(10deg);
+transform:scale(1.3);
 text-shadow:0 0 15px cyan;
 }
 
 /* BUTTON */
 .button{
-display:block;
-margin-top:15px;
-padding:14px;
-text-align:center;
-border-radius:12px;
+display:flex;
+align-items:center;
+justify-content:center;
+gap:8px;
+padding:12px;
 border:1px solid cyan;
+border-radius:10px;
 color:cyan;
-cursor:pointer;
+text-decoration:none;
 transition:.3s;
 }
 
 .button:hover{
 background:cyan;
 color:black;
-transform:scale(1.05);
 box-shadow:0 0 25px cyan;
 }
 
-/* AVATAR */
-#avatar{
-width:220px;
-transition:.4s;
+/* ROW */
+.row{
+display:flex;
+gap:10px;
+margin-top:20px;
 }
 
-#avatar:hover{
-transform:scale(1.1) rotate(3deg);
+.row .button{
+flex:1;
 }
 
-/* BIO */
-.bio{
-margin-top:40px;
-max-width:800px;
-background:rgba(0,0,0,.6);
-padding:20px;
-border-radius:20px;
+/* QR */
+.qr{
+width:50px;
+display:flex;
+align-items:center;
+justify-content:center;
 border:1px solid cyan;
-box-shadow:0 0 40px cyan;
-text-align:center;
+border-radius:10px;
+color:cyan;
+}
+
+.qr:hover{
+background:cyan;
+color:black;
+}
+
+/* DISCORD FIX */
+.discord{
+margin-top:15px;
+display:flex;
+align-items:center;
+justify-content:center;
+gap:10px;
 }
 
 /* RESPONSIVE */
-@media(max-width:768px){
-.dashboard{
-flex-direction:column;
-}
-#avatar{
-width:180px;
-}
+@media(max-width:480px){
+#avatar{width:150px;}
 }
