@@ -1,8 +1,9 @@
 const API = "/api";
 
-// 🔥 ANIMASI ANGKA (ANTI NaN)
+// ANIMASI ANGKA (ANTI NaN + SMOOTH)
 function animate(el, end){
-  end = Number(end) || 0; // FIX NaN
+  end = Number(end);
+  if(isNaN(end)) end = 0;
 
   let start = 0;
   let duration = 1200;
@@ -25,7 +26,7 @@ function animate(el, end){
   requestAnimationFrame(step);
 }
 
-// 🔥 LOAD DATA ROBLOX (ANTI ERROR)
+// LOAD DATA ROBLOX (SUPER STABLE)
 async function loadStats(){
   try{
     const res = await fetch(API);
@@ -34,28 +35,27 @@ async function loadStats(){
 
     const data = await res.json();
 
-    console.log("DATA ROBLOX:", data); // debug
+    console.log("ROBLOX DATA:", data);
 
-    animate(document.getElementById("friends"), data.friends);
-    animate(document.getElementById("followers"), data.followers);
-    animate(document.getElementById("following"), data.following);
+    animate(document.getElementById("friends"), data.friends ?? 0);
+    animate(document.getElementById("followers"), data.followers ?? 0);
+    animate(document.getElementById("following"), data.following ?? 0);
 
   }catch(err){
-    console.error("GAGAL LOAD:", err);
+    console.error("ERROR LOAD:", err);
 
-    // fallback kalau error
     animate(document.getElementById("friends"), 0);
     animate(document.getElementById("followers"), 0);
     animate(document.getElementById("following"), 0);
   }
 }
 
-// 🔥 LOAD AWAL + AUTO REFRESH
+// LOAD + REFRESH REALTIME
 loadStats();
 setInterval(loadStats, 5000);
 
-// 🔥 EFEK KLIK BUTTON
-document.querySelectorAll(".buttons a").forEach(btn=>{
+// EFEK BUTTON (TETAP)
+document.querySelectorAll(".btn").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     btn.style.transform = "scale(0.9)";
     setTimeout(()=>{
@@ -64,10 +64,10 @@ document.querySelectorAll(".buttons a").forEach(btn=>{
   });
 });
 
-// 🔥 HOVER ICON LEBIH HIDUP
+// ICON HOVER
 document.querySelectorAll(".icons a").forEach(icon=>{
   icon.addEventListener("mouseenter", ()=>{
-    icon.style.transform = "scale(1.3) rotate(8deg)";
+    icon.style.transform = "scale(1.3) rotate(6deg)";
   });
 
   icon.addEventListener("mouseleave", ()=>{
@@ -75,7 +75,7 @@ document.querySelectorAll(".icons a").forEach(icon=>{
   });
 });
 
-// 🔥 AVATAR INTERAKTIF (FOLLOW MOUSE)
+// AVATAR INTERAKTIF
 const avatar = document.getElementById("avatar");
 
 if(avatar){
