@@ -1,69 +1,87 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const http = require("http");
+const WebSocket = require("ws");
 
 const app = express();
 app.use(cors());
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
 app.use(express.static(path.join(__dirname, "public")));
 
 const USER_ID = 8941948601;
 
-// 🔥 FETCH DENGAN RETRY (ANTI ERROR ROBLOX)
-async function fetchWithRetry(url, retries = 3){
-  for(let i = 0; i < retries; i++){
-    try{
-      const res = await fetch(url);
-      const data = await res.json();
+// 🔥 CACHE SYSTEM
+let cache = {
+  data: { friends: 0, followers: 0, following: 0 },
+  lastFetch: 0
+};
 
-      if(data && typeof data.count === "number"){
-        return data.count;
-      }
+const CACHE_TIME = 10000; // 10 detik
 
-    }catch(e){
-      console.log("Retry fetch:", url);
-    }
+async function getRobloxData(){
+  const now = Date.now();
+
+  // pakai cache kalau masih fresh
+  if(now - cache.lastFetch < CACHE_TIME){
+    return cache.data;
   }
 
-  return 0;
+  try{
+    const [friends, followers, following] = await Promise.all([
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).then(r=>r.json()),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).then(r=>r.json()),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r=>r.json())
+    ]);
+
+    cache.data = {
+      friends: friends.count || 0,
+      followers: followers.count || 0,
+      following: following.count || 0
+    };
+
+    cache.lastFetch = now;
+
+    return cache.data;
+
+  }catch(err){
+    console.log("ERROR FETCH:", err);
+    return cache.data;
+  }
 }
 
-// 🔥 API ROBLOX SUPER STABLE
-app.get("/api", async (req, res) => {
-  try {
-
-    const friends = await fetchWithRetry(
-      `https://friends.roblox.com/v1/users/${USER_ID}/friends/count`
-    );
-
-    const followers = await fetchWithRetry(
-      `https://friends.roblox.com/v1/users/${USER_ID}/followers/count`
-    );
-
-    const following = await fetchWithRetry(
-      `https://friends.roblox.com/v1/users/${USER_ID}/followings/count`
-    );
-
-    res.json({
-      friends,
-      followers,
-      following
-    });
-
-  } catch (err) {
-    console.error("API ERROR:", err);
-
-    res.json({
-      friends: 0,
-      followers: 0,
-      following: 0
-    });
-  }
+// 🔥 API
+app.get("/api", async (req, res)=>{
+  const data = await getRobloxData();
+  res.json(data);
 });
 
-// ROUTE
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// 🔥 WEBSOCKET REALTIME
+wss.on("connection", (ws)=>{
+  console.log("CLIENT CONNECTED 🔗");
+
+  const sendData = async ()=>{
+    const data = await getRobloxData();
+    ws.send(JSON.stringify(data));
+  };
+
+  sendData();
+
+  const interval = setInterval(sendData, 5000);
+
+  ws.on("close", ()=>{
+    clearInterval(interval);
+    console.log("CLIENT DISCONNECTED ❌");
+  });
+});
+
+// 🔥 ROUTE
+app.get("*", (req,res)=>{
+  res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("SERVER LIVE 🔥"));
+server.listen(PORT, ()=>console.log("SERVER LIVE ⚡ REALTIME"));
