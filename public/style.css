@@ -1,1 +1,141 @@
+body{
+  margin:0;
+  font-family:Poppins;
+  background:black;
+  color:white;
+}
 
+/* BACKGROUND */
+.bg{
+  position:fixed;
+  width:100%;
+  height:100%;
+  background:url('https://i.ibb.co.com/9HQCvdjn/1775328895589.png') center/cover;
+  filter:brightness(0.35);
+  z-index:-1;
+}
+
+/* CONTAINER */
+.container{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+}
+
+/* CARD */
+.card{
+  width:360px;
+  padding:20px;
+  border-radius:20px;
+  background:rgba(0,0,0,0.7);
+  backdrop-filter:blur(12px);
+  box-shadow:0 0 60px rgba(0,255,255,0.5);
+  animation:fade 1s ease;
+}
+
+@keyframes fade{
+  from{opacity:0; transform:translateY(20px);}
+  to{opacity:1;}
+}
+
+/* HEADER */
+.header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
+
+.profile{
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  object-fit:cover;
+  box-shadow:0 0 20px cyan;
+  transition:.3s;
+}
+
+.profile:hover{
+  transform:scale(1.1);
+}
+
+/* AVATAR */
+.avatar-box{
+  text-align:center;
+  margin-top:15px;
+}
+
+#avatar{
+  width:200px;
+  border-radius:15px;
+  box-shadow:0 0 40px cyan;
+  transition:.4s;
+}
+
+#avatar:hover{
+  transform:scale(1.1) rotate(2deg);
+}
+
+/* STATS */
+.stats{
+  display:flex;
+  gap:10px;
+  margin-top:15px;
+}
+
+.stat{
+  flex:1;
+  text-align:center;
+  background:rgba(0,255,255,0.1);
+  padding:10px;
+  border-radius:10px;
+  transition:.3s;
+}
+
+.stat:hover{
+  transform:scale(1.05);
+  box-shadow:0 0 20px cyan;
+}
+
+/* ICON */
+.icons{
+  display:flex;
+  justify-content:center;
+  gap:15px;
+  margin-top:15px;
+}
+
+.icons a{
+  font-size:20px;
+  color:cyan;
+  transition:.3s;
+}
+
+.icons a:hover{
+  transform:scale(1.4) rotate(10deg);
+  text-shadow:0 0 10px cyan;
+}
+
+/* BUTTON */
+.buttons{
+  margin-top:15px;
+}
+
+.buttons a{
+  display:block;
+  margin:10px 0;
+  padding:12px;
+  text-align:center;
+  border-radius:12px;
+  border:1px solid cyan;
+  color:cyan;
+  text-decoration:none;
+  transition:.3s;
+}
+
+.buttons a:hover{
+  background:cyan;
+  color:black;
+  transform:scale(1.05);
+  box-shadow:0 0 25px cyan;
+}
