@@ -6,7 +6,7 @@ body{
   overflow-x:hidden;
 }
 
-/* BACKGROUND */
+/* BG */
 .bg{
   position:fixed;
   width:100%;
@@ -22,17 +22,16 @@ body{
   width:100%;
   height:100%;
   background:repeating-linear-gradient(
-    transparent,
-    transparent 2px,
-    rgba(0,255,255,0.05) 3px
+    0deg,
+    rgba(255,255,255,.03) 1px,
+    transparent 2px
   );
   animation:scan 6s linear infinite;
   z-index:-1;
 }
 
 @keyframes scan{
-  from{transform:translateY(0);}
-  to{transform:translateY(100%);}
+  to{background-position:0 100%;}
 }
 
 /* CONTAINER */
@@ -47,12 +46,51 @@ body{
 /* CARD */
 .card{
   width:100%;
-  max-width:380px;
-  padding:20px;
+  max-width:360px;
+  padding:22px;
   border-radius:20px;
   background:rgba(0,0,0,0.7);
   backdrop-filter:blur(12px);
-  box-shadow:0 0 60px cyan;
+  box-shadow:0 0 50px cyan;
+}
+
+/* GLITCH TEXT */
+.glitch{
+  position:relative;
+  color:cyan;
+  font-weight:700;
+  text-shadow:0 0 5px cyan;
+}
+
+.glitch::before,
+.glitch::after{
+  content:attr(data-text);
+  position:absolute;
+  left:0;
+  width:100%;
+  overflow:hidden;
+}
+
+.glitch::before{
+  animation:glitchTop 2s infinite;
+  color:red;
+}
+
+.glitch::after{
+  animation:glitchBottom 2s infinite;
+  color:blue;
+}
+
+@keyframes glitchTop{
+  0%{clip-path:inset(0 0 80% 0);}
+  50%{clip-path:inset(0 0 20% 0);}
+  100%{clip-path:inset(0 0 80% 0);}
+}
+
+@keyframes glitchBottom{
+  0%{clip-path:inset(80% 0 0 0);}
+  50%{clip-path:inset(20% 0 0 0);}
+  100%{clip-path:inset(80% 0 0 0);}
 }
 
 /* HEADER */
@@ -66,161 +104,129 @@ body{
   width:60px;
   height:60px;
   border-radius:50%;
-  box-shadow:0 0 20px cyan;
-}
-
-/* GLITCH */
-.glitch{
-  position:relative;
-}
-
-.glitch::before,
-.glitch::after{
-  content:attr(data-text);
-  position:absolute;
-  left:0;
-}
-
-.glitch::before{
-  color:red;
-  animation:glitch1 .3s infinite;
-}
-
-.glitch::after{
-  color:cyan;
-  animation:glitch2 .3s infinite;
-}
-
-@keyframes glitch1{
-  0%{transform:translate(1px,0);}
-  50%{transform:translate(-1px,1px);}
-}
-
-@keyframes glitch2{
-  0%{transform:translate(-1px,0);}
-  50%{transform:translate(1px,-1px);}
-}
-
-/* STATUS */
-.status{
-  font-size:12px;
-  margin-top:3px;
+  box-shadow:0 0 15px cyan;
 }
 
 /* AVATAR */
 .avatar-box{
   text-align:center;
-  margin-top:15px;
+  margin-top:12px;
 }
 
 #avatar{
   width:180px;
-  border-radius:15px;
-  box-shadow:0 0 40px cyan;
+  border-radius:12px;
+  box-shadow:0 0 30px cyan;
 }
 
 /* ID */
 .roblox-id{
-  margin-top:10px;
   text-align:center;
-  padding:8px;
-  border:1px solid cyan;
-  border-radius:10px;
+  margin-top:10px;
+  font-size:13px;
+  opacity:.8;
 }
 
 /* STATS */
 .stats{
-  display:flex;
-  justify-content:space-between;
-  margin-top:15px;
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:12px;
 }
 
 .stat{
-  width:32%;
   text-align:center;
   background:rgba(0,255,255,0.1);
   padding:8px;
-  border-radius:10px;
+  border-radius:8px;
   font-size:12px;
-}
-
-/* TAGLINE */
-.tagline{
-  text-align:center;
-  margin-top:10px;
-  color:cyan;
-}
-
-/* ICONS */
-.icons{
-  display:flex;
-  justify-content:center;
-  gap:20px;
-  margin-top:15px;
-}
-
-.icons a{
-  font-size:20px;
-  color:cyan;
-}
-
-/* BUTTON ROW */
-.button-row{
-  display:flex;
-  gap:10px;
-  margin-top:15px;
-}
-
-.btn{
-  text-decoration:none;
-  border:1px solid cyan;
-  color:cyan;
-  padding:12px;
-  border-radius:10px;
-  text-align:center;
   transition:.3s;
 }
 
-.main-btn{
-  flex:1;
+.stat:hover{
+  transform:scale(1.1);
+  box-shadow:0 0 15px cyan;
 }
 
-.qr-btn{
-  width:50px;
+/* TAG */
+.tagline{
+  text-align:center;
+  margin-top:10px;
+  font-size:13px;
+  color:cyan;
+}
+
+/* ICON */
+.icons{
   display:flex;
   justify-content:center;
+  gap:18px;
+  margin-top:12px;
+}
+
+.icons a{
+  font-size:18px;
+  color:cyan;
+  transition:.3s;
+}
+
+.icons a:hover{
+  transform:scale(1.3);
+}
+
+/* BUTTON */
+.btn{
+  display:flex;
   align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:11px;
+  border-radius:10px;
+  border:1px solid cyan;
+  color:cyan;
+  text-decoration:none;
+  font-size:13px;
+  transition:.3s;
 }
 
 .btn:hover{
   background:cyan;
   color:black;
-  box-shadow:0 0 20px cyan;
+}
+
+/* ROW */
+.button-row{
+  display:flex;
+  gap:8px;
+  margin-top:14px;
+}
+
+/* FIX QR SELALU SAMPING */
+.main-btn{
+  flex:1;
+}
+
+.qr-btn{
+  width:48px;
+  min-width:48px;
 }
 
 /* DISCORD */
-.buttons{
-  margin-top:15px;
-}
-
 .discord-btn{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:10px;
+  margin-top:10px;
 }
 
-/* RESPONSIVE */
+/* RESPONSIVE FIX */
 @media(max-width:480px){
-  .card{
-    padding:15px;
+
+  .header{
+    flex-direction:column;
+    text-align:center;
   }
 
-  #avatar{
-    width:150px;
+  .button-row{
+    flex-direction:row; /* tetap samping */
   }
 
-  .stat{
-    font-size:10px;
-  }
 }
