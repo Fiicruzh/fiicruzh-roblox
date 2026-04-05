@@ -4,6 +4,9 @@ const path = require("path");
 const http = require("http");
 const WebSocket = require("ws");
 
+// 🔥 FIX FETCH (WAJIB)
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+
 const app = express();
 app.use(cors());
 
@@ -14,33 +17,45 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const USER_ID = 8941948601;
 
-// 🔥 CACHE SYSTEM
+// 🔥 CACHE
 let cache = {
-  data: { friends: 0, followers: 0, following: 0 },
+  data: {
+    friends: 0,
+    followers: 0,
+    following: 0,
+    online: false
+  },
   lastFetch: 0
 };
 
-const CACHE_TIME = 10000; // 10 detik
+const CACHE_TIME = 10000;
 
 async function getRobloxData(){
   const now = Date.now();
 
-  // pakai cache kalau masih fresh
   if(now - cache.lastFetch < CACHE_TIME){
     return cache.data;
   }
 
   try{
-    const [friends, followers, following] = await Promise.all([
+    const [friends, followers, following, status] = await Promise.all([
       fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).then(r=>r.json()),
       fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).then(r=>r.json()),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r=>r.json())
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r=>r.json()),
+      fetch(`https://presence.roblox.com/v1/presence/users`,{
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({ userIds:[USER_ID] })
+      }).then(r=>r.json())
     ]);
+
+    const isOnline = status?.userPresences?.[0]?.userPresenceType !== 0;
 
     cache.data = {
       friends: friends.count || 0,
       followers: followers.count || 0,
-      following: following.count || 0
+      following: following.count || 0,
+      online: isOnline
     };
 
     cache.lastFetch = now;
@@ -54,28 +69,22 @@ async function getRobloxData(){
 }
 
 // 🔥 API
-app.get("/api", async (req, res)=>{
+app.get("/api", async (req,res)=>{
   const data = await getRobloxData();
   res.json(data);
 });
 
-// 🔥 WEBSOCKET REALTIME
+// 🔥 WEBSOCKET
 wss.on("connection", (ws)=>{
-  console.log("CLIENT CONNECTED 🔗");
-
-  const sendData = async ()=>{
+  const send = async ()=>{
     const data = await getRobloxData();
     ws.send(JSON.stringify(data));
   };
 
-  sendData();
+  send();
+  const interval = setInterval(send, 5000);
 
-  const interval = setInterval(sendData, 5000);
-
-  ws.on("close", ()=>{
-    clearInterval(interval);
-    console.log("CLIENT DISCONNECTED ❌");
-  });
+  ws.on("close", ()=>clearInterval(interval));
 });
 
 // 🔥 ROUTE
@@ -84,4 +93,4 @@ app.get("*", (req,res)=>{
 });
 
 const PORT = process.env.PORT || 3000;
-server.listen(PORT, ()=>console.log("SERVER LIVE ⚡ REALTIME"));
+server.listen(PORT, ()=>console.log("SERVER LIVE ⚡ FIXED"));
