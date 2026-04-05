@@ -4,36 +4,66 @@ const path = require("path");
 
 const app = express();
 app.use(cors());
-
-// 🔥 SERVE FRONTEND
 app.use(express.static(path.join(__dirname, "public")));
 
 const USER_ID = 8941948601;
 
-// 🔥 API ROBLOX
+// 🔥 FETCH DENGAN RETRY (ANTI ERROR ROBLOX)
+async function fetchWithRetry(url, retries = 3){
+  for(let i = 0; i < retries; i++){
+    try{
+      const res = await fetch(url);
+      const data = await res.json();
+
+      if(data && typeof data.count === "number"){
+        return data.count;
+      }
+
+    }catch(e){
+      console.log("Retry fetch:", url);
+    }
+  }
+
+  return 0;
+}
+
+// 🔥 API ROBLOX SUPER STABLE
 app.get("/api", async (req, res) => {
   try {
-    const [friends, followers, following] = await Promise.all([
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).then(r => r.json()),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).then(r => r.json()),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r => r.json())
-    ]);
+
+    const friends = await fetchWithRetry(
+      `https://friends.roblox.com/v1/users/${USER_ID}/friends/count`
+    );
+
+    const followers = await fetchWithRetry(
+      `https://friends.roblox.com/v1/users/${USER_ID}/followers/count`
+    );
+
+    const following = await fetchWithRetry(
+      `https://friends.roblox.com/v1/users/${USER_ID}/followings/count`
+    );
 
     res.json({
-      friends: friends.count,
-      followers: followers.count,
-      following: following.count
+      friends,
+      followers,
+      following
     });
 
   } catch (err) {
-    res.json({ friends: 0, followers: 0, following: 0 });
+    console.error("API ERROR:", err);
+
+    res.json({
+      friends: 0,
+      followers: 0,
+      following: 0
+    });
   }
 });
 
-// 🔥 ROUTE UTAMA
+// ROUTE
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log("SERVER LIVE 💀"));
+app.listen(PORT, () => console.log("SERVER LIVE 🔥"));
