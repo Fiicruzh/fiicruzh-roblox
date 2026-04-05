@@ -1,5 +1,16 @@
 const API = "/api";
 
+// 🔥 LOADING SCREEN AUTO HILANG
+window.addEventListener("load", ()=>{
+  const loading = document.querySelector(".loading");
+  if(loading){
+    setTimeout(()=>{
+      loading.style.opacity = "0";
+      setTimeout(()=> loading.style.display = "none", 500);
+    },1500);
+  }
+});
+
 // 🔥 ANIMASI ANGKA (ANTI NaN)
 function animate(el, end){
   end = Number(end) || 0; // FIX NaN
@@ -54,24 +65,32 @@ async function loadStats(){
 loadStats();
 setInterval(loadStats, 5000);
 
-// 🔥 EFEK KLIK BUTTON
-document.querySelectorAll(".buttons a").forEach(btn=>{
+// 🔥 EFEK KLIK BUTTON (UPGRADE LEBIH HALUS)
+document.querySelectorAll(".button, .buttons a").forEach(btn=>{
   btn.addEventListener("click", ()=>{
     btn.style.transform = "scale(0.9)";
+    btn.style.boxShadow = "0 0 40px cyan";
+
     setTimeout(()=>{
       btn.style.transform = "scale(1.05)";
-    },150);
+    },120);
+
+    setTimeout(()=>{
+      btn.style.transform = "scale(1)";
+    },220);
   });
 });
 
-// 🔥 HOVER ICON LEBIH HIDUP
+// 🔥 HOVER ICON LEBIH HIDUP (UPGRADE GLOW)
 document.querySelectorAll(".icons a").forEach(icon=>{
   icon.addEventListener("mouseenter", ()=>{
-    icon.style.transform = "scale(1.3) rotate(8deg)";
+    icon.style.transform = "scale(1.35) rotate(10deg)";
+    icon.style.textShadow = "0 0 20px cyan";
   });
 
   icon.addEventListener("mouseleave", ()=>{
     icon.style.transform = "scale(1)";
+    icon.style.textShadow = "none";
   });
 });
 
@@ -90,3 +109,37 @@ if(avatar){
     avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
   });
 }
+
+// 🔥 PARALLAX BACKGROUND (BARU)
+document.addEventListener("mousemove", (e)=>{
+  const bg = document.querySelector(".bg");
+  if(bg){
+    let x = e.clientX / 100;
+    let y = e.clientY / 100;
+    bg.style.transform = `translate(${x}px, ${y}px) scale(1.05)`;
+  }
+});
+
+// 🔥 HUD GLOW RANDOM (EFEK HIDUP)
+setInterval(()=>{
+  document.querySelectorAll(".profile-card, .avatar-box, .bio").forEach(el=>{
+    el.style.boxShadow = `
+      0 0 ${20 + Math.random()*40}px rgba(0,255,255,0.7)
+    `;
+  });
+}, 1200);
+
+// 🔥 SCANLINE INTENSITY CHANGE
+setInterval(()=>{
+  const scan = document.querySelector(".scanline");
+  if(scan){
+    scan.style.opacity = Math.random() * 0.15;
+  }
+}, 300);
+
+// 🔥 FLOATING EFFECT PANEL
+setInterval(()=>{
+  document.querySelectorAll(".profile-card, .avatar-box").forEach(el=>{
+    el.style.transform = `translateY(${Math.sin(Date.now()/500)*5}px)`;
+  });
+}, 30);
