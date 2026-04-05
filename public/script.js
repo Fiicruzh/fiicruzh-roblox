@@ -1,10 +1,9 @@
 const API = "/api";
 
-// 🔥 ANIMASI ANGKA (ANTI NaN)
+// 🔥 ANIMASI ANGKA
 function animate(el, end){
   end = Number(end) || 0;
 
-  let start = 0;
   let duration = 1200;
   let startTime = null;
 
@@ -30,20 +29,16 @@ function updateUI(data){
   animate(document.getElementById("friends"), data.friends);
   animate(document.getElementById("followers"), data.followers);
   animate(document.getElementById("following"), data.following);
-}
 
-// 🔥 LOAD API (fallback)
-async function loadStats(){
-  try{
-    const res = await fetch(API);
-    const data = await res.json();
-    updateUI(data);
-  }catch(err){
-    console.log("fallback error", err);
+  // 🔥 STATUS ONLINE
+  const statusEl = document.getElementById("status");
+  if(statusEl){
+    statusEl.innerText = data.online ? "ONLINE" : "OFFLINE";
+    statusEl.style.color = data.online ? "lime" : "red";
   }
 }
 
-// 🔥 WEBSOCKET REALTIME (TANPA REFRESH)
+// 🔥 WEBSOCKET
 function startRealtime(){
   const ws = new WebSocket(`ws://${location.host}`);
 
@@ -53,9 +48,19 @@ function startRealtime(){
   };
 
   ws.onerror = ()=>{
-    console.log("WS ERROR, fallback API");
     loadStats();
   };
+}
+
+// 🔥 FALLBACK API
+async function loadStats(){
+  try{
+    const res = await fetch(API);
+    const data = await res.json();
+    updateUI(data);
+  }catch(err){
+    console.log("API ERROR", err);
+  }
 }
 
 startRealtime();
@@ -69,7 +74,7 @@ document.querySelectorAll(".buttons a").forEach(btn=>{
   });
 });
 
-// 🔥 ICON HOVER
+// 🔥 ICON
 document.querySelectorAll(".icons a").forEach(icon=>{
   icon.addEventListener("mouseenter", ()=>{
     icon.style.transform = "scale(1.3) rotate(8deg)";
@@ -94,16 +99,4 @@ if(avatar){
   document.addEventListener("mouseleave", ()=>{
     avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
   });
-}
-
-// 🔥 GLITCH TEXT EFFECT
-const name = document.querySelector("h1");
-
-if(name){
-  setInterval(()=>{
-    name.style.textShadow = `
-      ${Math.random()*10}px 0 red,
-      ${-Math.random()*10}px 0 cyan
-    `;
-  },120);
 }
