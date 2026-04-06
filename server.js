@@ -76,15 +76,15 @@ app.get("/api", async (req,res)=>{
 
 app.get("/api/items", async (req,res)=>{
   try{
-    const response = await fetch(
+    const wearRes = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     );
 
-    const data = await response.json();
+    const wearData = await wearRes.json();
 
-    let ids = data.assetIds;
+    let ids = wearData.assetIds;
 
-    // 🔥 fallback kalau kosong / error
+    // 🔥 fallback kalau kosong
     if(!ids || ids.length === 0){
       console.log("⚠️ Roblox kosong, pakai fallback");
       ids = [
@@ -96,9 +96,18 @@ app.get("/api/items", async (req,res)=>{
       ];
     }
 
-    const result = ids.slice(0,5).map(id=>({
+    ids = ids.slice(0,5);
+
+    // 🔥 AMBIL THUMBNAIL REAL (INI FIX UTAMA)
+    const thumbRes = await fetch(
+      "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
+    );
+
+    const thumbData = await thumbRes.json();
+
+    const result = ids.map((id, index)=>({
       name: "Equipped Item",
-      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png&isCircular=false`,
+      image: thumbData.data[index]?.imageUrl || "https://via.placeholder.com/150",
       link: `https://www.roblox.com/catalog/${id}`
     }));
 
@@ -107,7 +116,6 @@ app.get("/api/items", async (req,res)=>{
   }catch(err){
     console.log("❌ ERROR ROBLOX:", err);
 
-    // 🔥 fallback total
     res.json([
       {
         name:"Fallback",
@@ -117,7 +125,6 @@ app.get("/api/items", async (req,res)=>{
     ]);
   }
 });
-
 // 🔥 WEBSOCKET
 wss.on("connection", (ws)=>{
   const send = async ()=>{
