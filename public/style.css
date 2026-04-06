@@ -232,7 +232,7 @@ body{
 }
 
 /* ===================== */
-/* ROBLOX ITEMS GRID */
+/* ROBLOX ITEMS */
 /* ===================== */
 
 .items-section{
@@ -246,22 +246,6 @@ body{
   margin-bottom:8px;
 }
 
-/* ===================== */
-/* ITEMS */
-/* ===================== */
-
-.items-section{
-  margin-top:15px;
-}
-
-.items-title{
-  text-align:center;
-  color:cyan;
-  font-size:13px;
-  margin-bottom:8px;
-}
-
-/* SCROLL */
 .items-container{
   display:flex;
   gap:10px;
@@ -303,6 +287,10 @@ body{
   100%{transform:rotate(360deg);}
 }
 
+.item-card:hover{
+  transform:scale(1.1);
+}
+
 /* IMAGE */
 .item-card img{
   width:100%;
@@ -315,7 +303,7 @@ body{
   margin-top:4px;
 }
 
-/* EQUIPPED BADGE */
+/* EQUIPPED */
 .equipped{
   position:absolute;
   top:4px;
