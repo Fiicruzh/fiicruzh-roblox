@@ -76,17 +76,16 @@ app.get("/api", async (req,res)=>{
 
 app.get("/api/items", async (req,res)=>{
   try{
+    // 🔥 ambil item yang dipakai
     const wearRes = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     );
-
     const wearData = await wearRes.json();
 
     let ids = wearData.assetIds;
 
     // 🔥 fallback kalau kosong
     if(!ids || ids.length === 0){
-      console.log("⚠️ Roblox kosong, pakai fallback");
       ids = [
         2510233257,
         13948472096,
@@ -96,20 +95,39 @@ app.get("/api/items", async (req,res)=>{
       ];
     }
 
-    ids = ids.slice(0,5);
-
-    // 🔥 AMBIL THUMBNAIL REAL (INI FIX UTAMA)
+    // 🔥 1. ambil THUMBNAIL
     const thumbRes = await fetch(
       "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
     );
-
     const thumbData = await thumbRes.json();
 
-    const result = ids.map((id, index)=>({
-      name: "Equipped Item",
-      image: thumbData.data[index]?.imageUrl || "https://via.placeholder.com/150",
-      link: `https://www.roblox.com/catalog/${id}`
-    }));
+    // 🔥 2. ambil DETAIL ITEM (NAMA ASLI)
+    const detailRes = await fetch(
+      "https://catalog.roblox.com/v1/catalog/items/details",
+      {
+        method:"POST",
+        headers:{ "Content-Type":"application/json" },
+        body: JSON.stringify({
+          items: ids.map(id=>({
+            itemType: "Asset",
+            id: id
+          }))
+        })
+      }
+    );
+
+    const detailData = await detailRes.json();
+
+    // 🔥 mapping hasil
+    const result = ids.map((id, index)=>{
+      const detail = detailData.data.find(d=>d.id === id);
+
+      return {
+        name: detail?.name || "Unknown Item",
+        image: thumbData.data[index]?.imageUrl || "https://via.placeholder.com/150",
+        link: `https://www.roblox.com/catalog/${id}`
+      };
+    });
 
     res.json(result);
 
@@ -118,13 +136,14 @@ app.get("/api/items", async (req,res)=>{
 
     res.json([
       {
-        name:"Fallback",
+        name:"Fallback Item",
         image:"https://via.placeholder.com/150",
         link:"#"
       }
     ]);
   }
 });
+
 // 🔥 WEBSOCKET
 wss.on("connection", (ws)=>{
   const send = async ()=>{
