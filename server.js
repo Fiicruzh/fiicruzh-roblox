@@ -69,27 +69,67 @@ async function getRobloxData(){
 }
 
 // 🔥 API
-app.get("/api", async (req,res)=>{
-  const data = await getRobloxData();
-  res.json(data);
-});
+// 🔥 REAL EQUIPPED ITEMS (100% WORK)
+app.get("/api/items", async (req,res)=>{
+  try{
+    const response = await fetch(
+      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+    );
 
-// 🔥 WEBSOCKET
-wss.on("connection", (ws)=>{
-  const send = async ()=>{
-    const data = await getRobloxData();
-    ws.send(JSON.stringify(data));
-  };
+    const data = await response.json();
 
-  send();
-  const interval = setInterval(send, 5000);
+    if(!data.assetIds || data.assetIds.length === 0){
+      return res.json([]);
+    }
 
-  ws.on("close", ()=>clearInterval(interval));
+    // 🔥 ambil 5 pertama
+    const ids = data.assetIds.slice(0,5);
+
+    const result = ids.map(id=>({
+      name: "Equipped Item",
+      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png&isCircular=false`,
+      link: `https://www.roblox.com/catalog/${id}`
+    }));
+
+    res.json(result);
+
+  }catch(err){
+    console.log("EQUIPPED ERROR:", err);
+    res.json([]);
+  }
 });
 
 // 🔥 ROUTE
 app.get("*", (req,res)=>{
   res.sendFile(path.join(__dirname,"public","index.html"));
+});
+// 🔥 ITEMS ROBLOX
+app.get("/api", async (req,res)=>{
+  try{
+    const response = await fetch(
+      `https://inventory.roblox.com/v2/users/${USER_ID}/inventory?limit=10&sortOrder=Desc`
+    );
+
+    const data = await response.json();
+
+    console.log("INVENTORY:", data);
+
+    if(!data.data || data.data.length === 0){
+      return res.json([]);
+    }
+
+    const result = data.data.slice(0,5).map(item=>({
+      name: item.name,
+      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${item.assetId}&size=150x150&format=Png&isCircular=false`,
+      link: `https://www.roblox.com/catalog/${item.assetId}`
+    }));
+
+    res.json(result);
+
+  }catch(err){
+    console.log("ITEM ERROR:", err);
+    res.json([]);
+  }
 });
 
 const PORT = process.env.PORT || 3000;
