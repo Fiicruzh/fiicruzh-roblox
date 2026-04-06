@@ -79,11 +79,12 @@ app.get("/api/items", async (req,res)=>{
     const wearRes = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     );
+
     const wearData = await wearRes.json();
 
     let ids = wearData.assetIds;
 
-    // fallback
+    // fallback kalau kosong
     if(!ids || ids.length === 0){
       ids = [
         2510233257,
@@ -94,15 +95,16 @@ app.get("/api/items", async (req,res)=>{
       ];
     }
 
-    // 🔥 ambil thumbnail SEKALI
+    // 🔥 ambil thumbnail sekali
     const thumbRes = await fetch(
       "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
     );
+
     const thumbData = await thumbRes.json();
 
-    // 🔥 ambil NAMA SATU-SATU (ANTI BLOK)
     const result = [];
 
+    // 🔥 LOOP SATU-SATU (ANTI ERROR)
     for(let i=0;i<ids.length;i++){
       const id = ids[i];
 
@@ -115,14 +117,14 @@ app.get("/api/items", async (req,res)=>{
 
         result.push({
           name: detail.Name || "Unknown Item",
-          image: thumbData.data[i]?.imageUrl || "https://via.placeholder.com/150",
+          image: thumbData.data?.[i]?.imageUrl || "https://via.placeholder.com/150",
           link: `https://www.roblox.com/catalog/${id}`
         });
 
-      }catch{
+      }catch(e){
         result.push({
           name: "Unknown Item",
-          image: thumbData.data[i]?.imageUrl || "https://via.placeholder.com/150",
+          image: thumbData.data?.[i]?.imageUrl || "https://via.placeholder.com/150",
           link: `https://www.roblox.com/catalog/${id}`
         });
       }
@@ -131,7 +133,7 @@ app.get("/api/items", async (req,res)=>{
     res.json(result);
 
   }catch(err){
-    console.log("❌ ERROR:", err);
+    console.log("❌ ERROR ROBLOX:", err);
 
     res.json([
       {
