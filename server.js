@@ -76,7 +76,6 @@ app.get("/api", async (req,res)=>{
 
 app.get("/api/items", async (req,res)=>{
   try{
-    // 🔥 ambil item yang dipakai
     const wearRes = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     );
@@ -84,7 +83,7 @@ app.get("/api/items", async (req,res)=>{
 
     let ids = wearData.assetIds;
 
-    // 🔥 fallback kalau kosong
+    // fallback
     if(!ids || ids.length === 0){
       ids = [
         2510233257,
@@ -95,48 +94,48 @@ app.get("/api/items", async (req,res)=>{
       ];
     }
 
-    // 🔥 1. ambil THUMBNAIL
+    // 🔥 ambil thumbnail SEKALI
     const thumbRes = await fetch(
       "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
     );
     const thumbData = await thumbRes.json();
 
-    // 🔥 2. ambil DETAIL ITEM (NAMA ASLI)
-    const detailRes = await fetch(
-      "https://catalog.roblox.com/v1/catalog/items/details",
-      {
-        method:"POST",
-        headers:{ "Content-Type":"application/json" },
-        body: JSON.stringify({
-          items: ids.map(id=>({
-            itemType: "Asset",
-            id: id
-          }))
-        })
+    // 🔥 ambil NAMA SATU-SATU (ANTI BLOK)
+    const result = [];
+
+    for(let i=0;i<ids.length;i++){
+      const id = ids[i];
+
+      try{
+        const detailRes = await fetch(
+          `https://economy.roblox.com/v2/assets/${id}/details`
+        );
+
+        const detail = await detailRes.json();
+
+        result.push({
+          name: detail.Name || "Unknown Item",
+          image: thumbData.data[i]?.imageUrl || "https://via.placeholder.com/150",
+          link: `https://www.roblox.com/catalog/${id}`
+        });
+
+      }catch{
+        result.push({
+          name: "Unknown Item",
+          image: thumbData.data[i]?.imageUrl || "https://via.placeholder.com/150",
+          link: `https://www.roblox.com/catalog/${id}`
+        });
       }
-    );
-
-    const detailData = await detailRes.json();
-
-    // 🔥 mapping hasil
-    const result = ids.map((id, index)=>{
-      const detail = detailData.data.find(d=>d.id === id);
-
-      return {
-        name: detail?.name || "Unknown Item",
-        image: thumbData.data[index]?.imageUrl || "https://via.placeholder.com/150",
-        link: `https://www.roblox.com/catalog/${id}`
-      };
-    });
+    }
 
     res.json(result);
 
   }catch(err){
-    console.log("❌ ERROR ROBLOX:", err);
+    console.log("❌ ERROR:", err);
 
     res.json([
       {
-        name:"Fallback Item",
+        name:"Fallback",
         image:"https://via.placeholder.com/150",
         link:"#"
       }
