@@ -11,23 +11,49 @@
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
 <style>
-.copy-btn {
-  margin-top: 8px;
-  padding: 8px 12px;
-  background: #111;
-  border: 1px solid #0ff;
-  color: #0ff;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: 0.3s;
-}
-.copy-btn:hover {
-  background: #0ff;
-  color: #000;
-}
 .center-text {
   text-align: center;
   margin-top: 10px;
+}
+
+/* BUTTON MODERN */
+.copy-btn {
+  margin-top: 10px;
+  padding: 10px 16px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 8px;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+}
+
+/* HOVER GLOW */
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 10px #0ff, 0 0 20px #0ff;
+}
+
+/* CLICK EFFECT */
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+/* SUCCESS STATE */
+.copy-btn.copied {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #000;
+  box-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88;
+}
+
+/* TEXT TRANSITION */
+.copy-btn span {
+  transition: 0.3s;
 }
 </style>
 
@@ -54,7 +80,7 @@
   <img id="avatar" src="https://i.ibb.co.com/sJ5Bpcdz/roblox.png">
 </div>
 
-<!-- PINDAHAN TEXT -->
+<!-- TEXT BAWAH AVATAR -->
 <div class="center-text">
   <div class="roblox-id">
     <i class="fa-solid fa-user"></i> NSSxFiiCruzh
@@ -62,8 +88,8 @@
 
   <p id="username">@dapaarowr4</p>
 
-  <button class="copy-btn" onclick="copyUsername()">
-    <i class="fa-solid fa-copy"></i> Copy Username
+  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
+    <span><i class="fa-solid fa-copy"></i> Copy Username</span>
   </button>
 </div>
 
@@ -113,8 +139,17 @@
 <script>
 function copyUsername() {
   const text = document.getElementById("username").innerText;
+  const btn = document.getElementById("copyBtn");
+
   navigator.clipboard.writeText(text);
-  alert("Username berhasil disalin: " + text);
+
+  btn.classList.add("copied");
+  btn.innerHTML = "<span><i class='fa-solid fa-check'></i> Copied ✅</span>";
+
+  setTimeout(() => {
+    btn.classList.remove("copied");
+    btn.innerHTML = "<span><i class='fa-solid fa-copy'></i> Copy Username</span>";
+  }, 2000);
 }
 </script>
 
