@@ -92,7 +92,7 @@ if(avatar){
 }
 
 // ============================
-// 🔥 FORCE LOAD ITEMS (FIX TOTAL)
+// 🔥 ROBLOX ITEMS FINAL SYSTEM
 // ============================
 
 window.addEventListener("DOMContentLoaded", ()=>{
@@ -109,11 +109,12 @@ function createCard(item, index){
     <div class="item-name">${item.name}</div>
   `;
 
+  // klik → marketplace
   div.onclick = ()=>{
     window.open(item.link, "_blank");
   };
 
-  // 🔥 3D tilt
+  // 3D TILT
   div.addEventListener("mousemove", e=>{
     const rect = div.getBoundingClientRect();
     const x = e.clientX - rect.left;
@@ -134,61 +135,38 @@ function createCard(item, index){
 }
 
 async function loadItems(){
+  const container = document.getElementById("itemsContainer");
+  if(!container) return;
+
+  // skeleton loading
+  container.innerHTML = "";
+  for(let i=0;i<5;i++){
+    const sk = document.createElement("div");
+    sk.className = "skeleton";
+    container.appendChild(sk);
+  }
+
   try{
-    console.log("🔥 LOAD ITEMS START");
-
-    const container = document.getElementById("itemsContainer");
-
-    if(!container){
-      console.error("❌ itemsContainer TIDAK ADA");
-      return;
-    }
-
-    // 🔥 skeleton dulu
-    container.innerHTML = "";
-    for(let i=0;i<5;i++){
-      const sk = document.createElement("div");
-      sk.className = "skeleton";
-      container.appendChild(sk);
-    }
-
     const res = await fetch("/api/items");
-
-    if(!res.ok){
-      throw new Error("API gagal");
-    }
-
     const items = await res.json();
 
-    console.log("✅ ITEMS:", items);
-
     container.innerHTML = "";
 
-    // 🔥 fallback (HARUS ADA)
-    if(!items || items.length === 0){
-      console.warn("⚠️ kosong, pakai dummy");
+    // fallback kalau kosong
+    const finalItems = (items && items.length) ? items : [
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
+    ];
 
-      for(let i=0;i<5;i++){
-        container.appendChild(createCard({
-          name:"No Item",
-          image:"https://via.placeholder.com/150",
-          link:"#"
-        }, i));
-      }
-
-      return;
-    }
-
-    items.slice(0,5).forEach((item,i)=>{
-      container.appendChild(createCard(item, i));
+    finalItems.slice(0,5).forEach((item,i)=>{
+      container.appendChild(createCard(item,i));
     });
 
   }catch(err){
-    console.error("❌ ERROR LOAD:", err);
-
-    const container = document.getElementById("itemsContainer");
-    if(container){
-      container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
-    }
+    console.log("ITEM ERROR:", err);
+    container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
