@@ -69,6 +69,11 @@ async function getRobloxData(){
 }
 
 // 🔥 API
+app.get("/api", async (req,res)=>{
+  const data = await getRobloxData();
+  res.json(data);
+});
+
 app.get("/api/items", async (req,res)=>{
   try{
     const response = await fetch(
@@ -77,10 +82,11 @@ app.get("/api/items", async (req,res)=>{
 
     const data = await response.json();
 
-    let ids = data.assetIds || [];
+    let ids = data.assetIds;
 
-    // 🔥 fallback kalau kosong
-    if(ids.length === 0){
+    // 🔥 fallback kalau kosong / error
+    if(!ids || ids.length === 0){
+      console.log("⚠️ Roblox kosong, pakai fallback");
       ids = [
         2510233257,
         13948472096,
@@ -90,9 +96,7 @@ app.get("/api/items", async (req,res)=>{
       ];
     }
 
-    ids = ids.slice(0,5);
-
-    const result = ids.map(id=>({
+    const result = ids.slice(0,5).map(id=>({
       name: "Equipped Item",
       image: `https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png&isCircular=false`,
       link: `https://www.roblox.com/catalog/${id}`
@@ -101,9 +105,9 @@ app.get("/api/items", async (req,res)=>{
     res.json(result);
 
   }catch(err){
-    console.log("ITEM ERROR:", err);
+    console.log("❌ ERROR ROBLOX:", err);
 
-    // 🔥 fallback kalau error total
+    // 🔥 fallback total
     res.json([
       {
         name:"Fallback",
