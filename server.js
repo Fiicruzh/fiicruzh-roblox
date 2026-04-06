@@ -69,7 +69,12 @@ async function getRobloxData(){
 }
 
 // 🔥 API
-// 🔥 REAL EQUIPPED ITEMS (100% WORK)
+app.get("/api", async (req,res)=>{
+  const data = await getRobloxData();
+  res.json(data);
+});
+
+// 🔥 EQUIPPED ITEMS (ANTI KOSONG)
 app.get("/api/items", async (req,res)=>{
   try{
     const response = await fetch(
@@ -78,50 +83,16 @@ app.get("/api/items", async (req,res)=>{
 
     const data = await response.json();
 
-    if(!data.assetIds || data.assetIds.length === 0){
+    if(!data.assetIds){
       return res.json([]);
     }
 
-    // 🔥 ambil 5 pertama
     const ids = data.assetIds.slice(0,5);
 
     const result = ids.map(id=>({
       name: "Equipped Item",
-      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png&isCircular=false`,
+      image: `https://thumbnails.roblox.com/v1/assets/${id}/150/150/Image/Png`,
       link: `https://www.roblox.com/catalog/${id}`
-    }));
-
-    res.json(result);
-
-  }catch(err){
-    console.log("EQUIPPED ERROR:", err);
-    res.json([]);
-  }
-});
-
-// 🔥 ROUTE
-app.get("*", (req,res)=>{
-  res.sendFile(path.join(__dirname,"public","index.html"));
-});
-// 🔥 ITEMS ROBLOX
-app.get("/api", async (req,res)=>{
-  try{
-    const response = await fetch(
-      `https://inventory.roblox.com/v2/users/${USER_ID}/inventory?limit=10&sortOrder=Desc`
-    );
-
-    const data = await response.json();
-
-    console.log("INVENTORY:", data);
-
-    if(!data.data || data.data.length === 0){
-      return res.json([]);
-    }
-
-    const result = data.data.slice(0,5).map(item=>({
-      name: item.name,
-      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${item.assetId}&size=150x150&format=Png&isCircular=false`,
-      link: `https://www.roblox.com/catalog/${item.assetId}`
     }));
 
     res.json(result);
@@ -130,6 +101,24 @@ app.get("/api", async (req,res)=>{
     console.log("ITEM ERROR:", err);
     res.json([]);
   }
+});
+
+// 🔥 WEBSOCKET
+wss.on("connection", (ws)=>{
+  const send = async ()=>{
+    const data = await getRobloxData();
+    ws.send(JSON.stringify(data));
+  };
+
+  send();
+  const interval = setInterval(send, 5000);
+
+  ws.on("close", ()=>clearInterval(interval));
+});
+
+// 🔥 ROUTE
+app.get("*", (req,res)=>{
+  res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
