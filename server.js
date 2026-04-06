@@ -69,12 +69,6 @@ async function getRobloxData(){
 }
 
 // 🔥 API
-app.get("/api", async (req,res)=>{
-  const data = await getRobloxData();
-  res.json(data);
-});
-
-// 🔥 EQUIPPED ITEMS (ANTI KOSONG)
 app.get("/api/items", async (req,res)=>{
   try{
     const response = await fetch(
@@ -83,15 +77,24 @@ app.get("/api/items", async (req,res)=>{
 
     const data = await response.json();
 
-    if(!data.assetIds){
-      return res.json([]);
+    let ids = data.assetIds || [];
+
+    // 🔥 fallback kalau kosong
+    if(ids.length === 0){
+      ids = [
+        2510233257,
+        13948472096,
+        14618207727,
+        72586402670658,
+        88273993498454
+      ];
     }
 
-    const ids = data.assetIds.slice(0,5);
+    ids = ids.slice(0,5);
 
     const result = ids.map(id=>({
       name: "Equipped Item",
-      image: `https://thumbnails.roblox.com/v1/assets/${id}/150/150/Image/Png`,
+      image: `https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png&isCircular=false`,
       link: `https://www.roblox.com/catalog/${id}`
     }));
 
@@ -99,7 +102,15 @@ app.get("/api/items", async (req,res)=>{
 
   }catch(err){
     console.log("ITEM ERROR:", err);
-    res.json([]);
+
+    // 🔥 fallback kalau error total
+    res.json([
+      {
+        name:"Fallback",
+        image:"https://via.placeholder.com/150",
+        link:"#"
+      }
+    ]);
   }
 });
 
