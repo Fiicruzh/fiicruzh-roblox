@@ -90,3 +90,105 @@ if(avatar){
     avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
   });
 }
+
+// ============================
+// 🔥 FORCE LOAD ITEMS (FIX TOTAL)
+// ============================
+
+window.addEventListener("DOMContentLoaded", ()=>{
+  loadItems();
+});
+
+function createCard(item, index){
+  const div = document.createElement("div");
+  div.className = "item-card";
+
+  div.innerHTML = `
+    ${index === 0 ? '<div class="equipped">ON</div>' : ''}
+    <img src="${item.image}" onerror="this.src='https://via.placeholder.com/150'">
+    <div class="item-name">${item.name}</div>
+  `;
+
+  div.onclick = ()=>{
+    window.open(item.link, "_blank");
+  };
+
+  // 🔥 3D tilt
+  div.addEventListener("mousemove", e=>{
+    const rect = div.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    div.style.transform = `
+      rotateX(${-(y-rect.height/2)/10}deg)
+      rotateY(${(x-rect.width/2)/10}deg)
+      scale(1.05)
+    `;
+  });
+
+  div.addEventListener("mouseleave", ()=>{
+    div.style.transform = "rotateX(0) rotateY(0)";
+  });
+
+  return div;
+}
+
+async function loadItems(){
+  try{
+    console.log("🔥 LOAD ITEMS START");
+
+    const container = document.getElementById("itemsContainer");
+
+    if(!container){
+      console.error("❌ itemsContainer TIDAK ADA");
+      return;
+    }
+
+    // 🔥 skeleton dulu
+    container.innerHTML = "";
+    for(let i=0;i<5;i++){
+      const sk = document.createElement("div");
+      sk.className = "skeleton";
+      container.appendChild(sk);
+    }
+
+    const res = await fetch("/api/items");
+
+    if(!res.ok){
+      throw new Error("API gagal");
+    }
+
+    const items = await res.json();
+
+    console.log("✅ ITEMS:", items);
+
+    container.innerHTML = "";
+
+    // 🔥 fallback (HARUS ADA)
+    if(!items || items.length === 0){
+      console.warn("⚠️ kosong, pakai dummy");
+
+      for(let i=0;i<5;i++){
+        container.appendChild(createCard({
+          name:"No Item",
+          image:"https://via.placeholder.com/150",
+          link:"#"
+        }, i));
+      }
+
+      return;
+    }
+
+    items.slice(0,5).forEach((item,i)=>{
+      container.appendChild(createCard(item, i));
+    });
+
+  }catch(err){
+    console.error("❌ ERROR LOAD:", err);
+
+    const container = document.getElementById("itemsContainer");
+    if(container){
+      container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
+    }
+  }
+}
