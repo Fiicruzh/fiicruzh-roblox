@@ -10,6 +10,47 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
+<style>
+.center-text {
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* BUTTON USERNAME */
+.copy-btn {
+  margin-top: 10px;
+  padding: 12px 18px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 10px;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+/* HOVER */
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
+}
+
+/* CLICK */
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+/* SUCCESS */
+.copy-btn.copied {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #000;
+  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
+}
+</style>
+
 </head>
 
 <body>
@@ -25,7 +66,6 @@
   <img class="profile" src="https://i.ibb.co.com/PXr3MG9/IMG-20260224-184119-293.webp">
   <div class="name-box">
     <h1 class="glitch" data-text="FiiCruzh">FiiCruzh</h1>
-    <p>@dapaarowr4</p>
   </div>
 </div>
 
@@ -34,9 +74,11 @@
   <img id="avatar" src="https://i.ibb.co.com/sJ5Bpcdz/roblox.png">
 </div>
 
-<!-- ID -->
-<div class="roblox-id">
-  <i class="fa-solid fa-user"></i> NSSSxFiiCruzh
+<!-- BUTTON USERNAME (UPDATED) -->
+<div class="center-text">
+  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
+    <i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4
+  </button>
 </div>
 
 <!-- STATS -->
@@ -82,6 +124,22 @@
 </div>
 </div>
 
-<script src="script.js"></script>
+<script>
+function copyUsername() {
+  const btn = document.getElementById("copyBtn");
+  const text = "@dapaarowr4";
+
+  navigator.clipboard.writeText(text);
+
+  btn.classList.add("copied");
+  btn.innerHTML = "<i class='fa-solid fa-check'></i> Copied ✅";
+
+  setTimeout(() => {
+    btn.classList.remove("copied");
+    btn.innerHTML = "<i class='fa-solid fa-user'></i> NSSxFiiCruzh | @dapaarowr4";
+  }, 2000);
+}
+</script>
+
 </body>
 </html>
