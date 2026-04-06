@@ -161,7 +161,7 @@ async function loadItems(){
       {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
     ];
 
-    finalItems.slice(0,5).forEach((item,i)=>{
+    finalItems.slice(0,20).forEach((item,i)=>{
       container.appendChild(createCard(item,i));
     });
 
@@ -170,3 +170,4 @@ async function loadItems(){
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
+console.log("ITEM COUNT:", finalItems.length);
