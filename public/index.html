@@ -10,6 +10,27 @@
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
 
+<style>
+.copy-btn {
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: #111;
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: 0.3s;
+}
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+}
+.center-text {
+  text-align: center;
+  margin-top: 10px;
+}
+</style>
+
 </head>
 
 <body>
@@ -25,7 +46,6 @@
   <img class="profile" src="https://i.ibb.co.com/PXr3MG9/IMG-20260224-184119-293.webp">
   <div class="name-box">
     <h1 class="glitch" data-text="FiiCruzh">FiiCruzh</h1>
-    <p>@dapaarowr4</p>
   </div>
 </div>
 
@@ -34,9 +54,17 @@
   <img id="avatar" src="https://i.ibb.co.com/sJ5Bpcdz/roblox.png">
 </div>
 
-<!-- ID -->
-<div class="roblox-id">
-  <i class="fa-solid fa-user"></i> NSSSxFiiCruzh
+<!-- PINDAHAN TEXT -->
+<div class="center-text">
+  <div class="roblox-id">
+    <i class="fa-solid fa-user"></i> NSSxFiiCruzh
+  </div>
+
+  <p id="username">@dapaarowr4</p>
+
+  <button class="copy-btn" onclick="copyUsername()">
+    <i class="fa-solid fa-copy"></i> Copy Username
+  </button>
 </div>
 
 <!-- STATS -->
@@ -82,6 +110,13 @@
 </div>
 </div>
 
-<script src="script.js"></script>
+<script>
+function copyUsername() {
+  const text = document.getElementById("username").innerText;
+  navigator.clipboard.writeText(text);
+  alert("Username berhasil disalin: " + text);
+}
+</script>
+
 </body>
 </html>
