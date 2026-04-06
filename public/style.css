@@ -230,3 +230,113 @@ body{
   }
 
 }
+
+/* ===================== */
+/* ROBLOX ITEMS GRID */
+/* ===================== */
+
+.items-section{
+  margin-top:15px;
+}
+
+.items-title{
+  text-align:center;
+  color:cyan;
+  font-size:13px;
+  margin-bottom:8px;
+}
+
+/* ===================== */
+/* ITEMS */
+/* ===================== */
+
+.items-section{
+  margin-top:15px;
+}
+
+.items-title{
+  text-align:center;
+  color:cyan;
+  font-size:13px;
+  margin-bottom:8px;
+}
+
+/* SCROLL */
+.items-container{
+  display:flex;
+  gap:10px;
+  overflow-x:auto;
+  min-height:110px;
+}
+
+/* CARD */
+.item-card{
+  min-width:90px;
+  background:rgba(0,255,255,0.05);
+  border-radius:10px;
+  padding:6px;
+  text-align:center;
+  cursor:pointer;
+  transition:0.3s;
+  position:relative;
+  transform-style:preserve-3d;
+}
+
+/* RGB GLOW */
+.item-card::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:linear-gradient(45deg, red, cyan, blue, lime);
+  filter:blur(8px);
+  opacity:0;
+  transition:0.3s;
+  z-index:-1;
+  animation:rgb 3s linear infinite;
+}
+
+.item-card:hover::before{
+  opacity:1;
+}
+
+@keyframes rgb{
+  100%{transform:rotate(360deg);}
+}
+
+/* IMAGE */
+.item-card img{
+  width:100%;
+  border-radius:6px;
+}
+
+/* NAME */
+.item-name{
+  font-size:10px;
+  margin-top:4px;
+}
+
+/* EQUIPPED BADGE */
+.equipped{
+  position:absolute;
+  top:4px;
+  left:4px;
+  font-size:8px;
+  background:lime;
+  color:black;
+  padding:2px 4px;
+  border-radius:4px;
+}
+
+/* SKELETON */
+.skeleton{
+  min-width:90px;
+  height:90px;
+  border-radius:10px;
+  background:linear-gradient(90deg,#111,#222,#111);
+  animation:loading 1.2s infinite;
+}
+
+@keyframes loading{
+  0%{background-position:-100px}
+  100%{background-position:200px}
+}
