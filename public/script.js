@@ -132,59 +132,36 @@ class PortfolioApp {
   }
 
   async loadRobloxAvatar() {
-    try {
-      const res = await this.fetchWithRetry('/api/avatar3d');
-      const data = await res.json();
-      
-      if (data.gltfUrl) {
-        this.loadGLTF(data.gltfUrl);
-      } else {
-        this.showFallbackAvatar();
-      }
-    } catch (err) {
-      console.error('Avatar load failed:', err);
+  try {
+    const res = await this.fetchWithRetry('/api/avatar3d');
+    const data = await res.json();
+    
+    if (data.gltfUrl) {
+      // Try GLTF first
+      this.loader.load(
+        data.gltfUrl,
+        (gltf) => {
+          const model = gltf.scene;
+          model.scale.set(2, 2, 2);
+          model.position.y = -1;
+          this.scene.add(model);
+          this.avatarMesh = model;
+          console.log('✅ Roblox GLTF loaded');
+        },
+        undefined,
+        () => {
+          console.log('❌ GLTF failed, using fallback');
+          this.showFallbackAvatar();
+        }
+      );
+    } else {
       this.showFallbackAvatar();
     }
+  } catch (err) {
+    console.error('Avatar load failed:', err);
+    this.showFallbackAvatar();
   }
-
-  loadGLTF(url) {
-    // Clear previous model
-    if (this.avatarMesh) {
-      this.scene.remove(this.avatarMesh);
-    }
-
-    this.loader.load(
-      url,
-      (gltf) => {
-        const model = gltf.scene;
-        model.scale.set(1.5, 1.5, 1.5);
-        model.position.set(0, -0.5, 0);
-        this.scene.add(model);
-        this.avatarMesh = model;
-        console.log('✅ Roblox 3D Avatar loaded');
-      },
-      (progress) => {
-        console.log('Loading avatar:', (progress.loaded / progress.total * 100) + '%');
-      },
-      (error) => {
-        console.error('GLTF load error:', error);
-        this.showFallbackAvatar();
-      }
-    );
-  }
-
-  showFallbackAvatar() {
-    // Simple fallback cube with Roblox texture
-    const geometry = new THREE.BoxGeometry(1, 2, 0.5);
-    const material = new THREE.MeshPhongMaterial({ 
-      color: 0x00ffff,
-      shininess: 100 
-    });
-    const cube = new THREE.Mesh(geometry, material);
-    cube.rotation.y = Math.PI;
-    this.scene.add(cube);
-    this.avatarMesh = cube;
-  }
+}
 
   // 🔥 WEBSOCKET REAL-TIME UPDATE (Smart - only on change)
   connectWebSocket() {
