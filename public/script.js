@@ -1,143 +1,118 @@
-class PortfolioApp {
+class App {
   constructor() {
-    this.ws = null;
-    this.avatarImg = null;
-    this.isDragging = false;
-    this.lastX = 0;
-    this.rotationY = 0;
-    this.targetRotationY = 0;
-    this.velocityY = 0;
-    this.autoRotate = 0.4;
     this.init();
   }
 
   init() {
-    console.log('🚀 Starting...');
-    this.setup3DCanvas();
-    this.loadAvatar();
-    this.connectWebSocket();
+    this.canvas = document.getElementById('avatar3D');
+    this.setupDrag();
     this.loadData();
+    this.wsConnect();
     this.copyBtn();
+    this.animate();
   }
 
-  setup3DCanvas() {
-    const canvas = document.getElementById('avatar3D');
-    canvas.width = 400;
-    canvas.height = 400;
+  setupDrag() {
+    let dragging = false, lastX = 0, rotY = 0, targetRotY = 0;
     
-    canvas.addEventListener('mousedown', (e) => {
-      this.isDragging = true;
-      this.lastX = e.clientX;
-      canvas.style.cursor = 'grabbing';
-    });
+    this.canvas.onmousedown = (e) => {
+      dragging = true;
+      lastX = e.clientX;
+      this.canvas.style.cursor = 'grabbing';
+    };
     
-    document.addEventListener('mousemove', (e) => {
-      if (!this.isDragging) return;
-      const deltaX = e.clientX - this.lastX;
-      this.velocityY = deltaX * 0.3;
-      this.targetRotationY += deltaX * 0.5;
-      this.lastX = e.clientX;
-    });
+    document.onmousemove = (e) => {
+      if (!dragging) return;
+      const delta = e.clientX - lastX;
+      targetRotY += delta * 0.5;
+      lastX = e.clientX;
+    };
     
-    document.addEventListener('mouseup', () => {
-      this.isDragging = false;
-      canvas.style.cursor = 'grab';
-    });
+    document.onmouseup = () => {
+      dragging = false;
+      this.canvas.style.cursor = 'grab';
+    };
     
-    // Touch support
-    canvas.addEventListener('touchstart', (e) => {
-      this.isDragging = true;
-      this.lastX = e.touches[0].clientX;
-    });
-    document.addEventListener('touchmove', (e) => {
-      if (!this.isDragging) return;
+    // Touch
+    this.canvas.ontouchstart = (e) => {
+      dragging = true;
+      lastX = e.touches[0].clientX;
+    };
+    document.ontouchmove = (e) => {
+      if (!dragging) return;
       e.preventDefault();
-      const deltaX = e.touches[0].clientX - this.lastX;
-      this.velocityY = deltaX * 0.3;
-      this.targetRotationY += deltaX * 0.5;
-      this.lastX = e.touches[0].clientX;
-    });
-    document.addEventListener('touchend', () => this.isDragging = false);
+      const delta = e.touches[0].clientX - lastX;
+      targetRotY += delta * 0.5;
+      lastX = e.touches[0].clientX;
+    };
+    document.ontouchend = () => dragging = false;
     
-    this.animate3D(canvas);
-  }
-
-  loadAvatar() {
-    fetch('/api/avatar')
-      .then(res => res.json())
-      .then(data => {
-        console.log('Avatar:', data);
-        this.avatarImg = new Image();
-        this.avatarImg.crossOrigin = 'anonymous';
-        this.avatarImg.src = data.image;
-      })
-      .catch(err => {
-        console.error('Avatar fallback');
-        this.avatarImg = new Image();
-        this.avatarImg.src = `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`;
-      });
-  }
-
-  animate3D(canvas) {
-    const ctx = canvas.getContext('2d');
-    const render = () => {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    this.animate = () => {
+      rotY += (targetRotY - rotY) * 0.1;
+      rotY += 0.2; // Auto rotate
+      requestAnimationFrame(this.animate);
       
-      // Smooth rotation
-      if (!this.isDragging) {
-        this.velocityY *= 0.94;
-        this.targetRotationY += this.velocityY + this.autoRotate;
-      }
-      this.rotationY += (this.targetRotationY - this.rotationY) * 0.12;
+      const ctx = this.canvas.getContext('2d');
+      ctx.clearRect(0, 0, 400, 400);
       
-      // 3D Transform
       ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(this.rotationY * 0.008);
+      ctx.translate(200, 200);
+      ctx.rotate(rotY * 0.008);
       
-      // Glow lighting
-      const gradient = ctx.createRadialGradient(0, -60, 0, 0, 0, 180);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.7)');
-      gradient.addColorStop(0.6, 'rgba(0,255,255,0.2)');
-      gradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = gradient;
+      // Glow
+      const g = ctx.createRadialGradient(0, -50, 0, 0, 0, 200);
+      g.addColorStop(0, 'rgba(0,255,255,0.8)');
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
       ctx.fillRect(-110, -110, 220, 220);
       
       // Shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.8)';
-      ctx.shadowBlur = 35;
-      ctx.shadowOffsetX = 20;
-      ctx.shadowOffsetY = 20;
+      ctx.shadowColor = '#000';
+      ctx.shadowBlur = 40;
+      ctx.shadowOffsetY = 25;
       
-      // Avatar
+      // Avatar image
       if (this.avatarImg?.complete) {
         ctx.shadowColor = 'cyan';
-        ctx.shadowBlur = 25;
-        ctx.drawImage(this.avatarImg, -100, -100, 200, 200);
+        ctx.drawImage(this.avatarImg, -95, -95, 190, 190);
       }
       
       ctx.restore();
-      requestAnimationFrame(render);
     };
-    render();
   }
 
-  connectWebSocket() {
-    const ws = new WebSocket(`${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`);
+  async loadData() {
+    // Avatar
+    const avatarRes = await fetch('/api/avatar');
+    const avatarData = await avatarRes.json();
+    this.avatarImg = new Image();
+    this.avatarImg.src = avatarData.image;
+    console.log('Avatar:', avatarData.image);
     
-    ws.onopen = () => {
-      console.log('✅ WebSocket OK');
+    // Stats
+    const statsRes = await fetch('/api');
+    const stats = await statsRes.json();
+    document.getElementById('friends').textContent = stats.friends;
+    document.getElementById('followers').textContent = stats.followers;
+    document.getElementById('following').textContent = stats.following;
+    
+    // Items
+    const itemsRes = await fetch('/api/items');
+    const itemsData = await itemsRes.json();
+    this.renderItems(itemsData.items);
+  }
+
+  wsConnect() {
+    const ws = new WebSocket(`${location.protocol === 'wss:' ? 'wss' : 'ws'}://${location.host}/websocket`);
+    
+    ws.onmessage = (e) => {
+      const data = JSON.parse(e.data);
       document.getElementById('liveIndicator').textContent = '🟢';
-    };
-    
-    ws.onmessage = (event) => {
-      const data = JSON.parse(event.data);
-      console.log('WS:', data);
       
       if (data.stats) {
-        document.getElementById('friends').textContent = data.stats.friends || 0;
-        document.getElementById('followers').textContent = data.stats.followers || 0;
-        document.getElementById('following').textContent = data.following || 0;
+        document.getElementById('friends').textContent = data.stats.friends;
+        document.getElementById('followers').textContent = data.stats.followers;
+        document.getElementById('following').textContent = data.following;
       }
       
       if (data.items) {
@@ -146,50 +121,35 @@ class PortfolioApp {
     };
   }
 
-  async loadData() {
-    // Stats
-    fetch('/api').then(res => res.json()).then(data => {
-      document.getElementById('friends').textContent = data.friends || 0;
-      document.getElementById('followers').textContent = data.followers || 0;
-      document.getElementById('following').textContent = data.following || 0;
-    });
-    
-    // Items
-    fetch('/api/items').then(res => res.json()).then(data => {
-      this.renderItems(data.items || []);
-    });
-  }
-
   renderItems(items) {
     const container = document.getElementById('itemsContainer');
-    if (!items.length) {
-      container.innerHTML = '<div style="padding:20px;color:#888;font-size:12px;text-align:center">No items equipped</div>';
+    if (!items?.length) {
+      container.innerHTML = '<div style="padding:20px;color:#888;text-align:center;font-size:12px">No items equipped</div>';
       return;
     }
     
     container.innerHTML = items.map((item, i) => `
-      <div class="item-card" onclick="window.open('${item.link}', '_blank')">
+      <div class="item-card" style="cursor:pointer" onclick="window.open('${item.link}')">
         ${i === 0 ? '<div class="equipped">ACTIVE</div>' : ''}
-        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/222/fff?text=?';">
-        <div class="item-name">${item.name}</div>
+        ${item.limited ? '<div class="limited">★</div>' : ''}
+        <img src="${item.image}" style="width:100%;height:70px;object-fit:cover;border-radius:6px;" onerror="this.src='https://via.placeholder.com/90x70/333/fff?text=?'">
+        <div class="item-name" style="font-size:10px;margin-top:4px;">${item.name}</div>
       </div>
     `).join('');
   }
 
   copyBtn() {
     document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.innerHTML = '✅ Copied!';
-        btn.style.background = '#00ff88';
-        setTimeout(() => {
-          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-          btn.style.background = '';
-        }, 1500);
-      });
+      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4');
+      const btn = document.getElementById('copyBtn');
+      btn.textContent = '✅ Copied!';
+      btn.style.background = '#00ff88';
+      setTimeout(() => {
+        btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+        btn.style.background = '';
+      }, 1500);
     };
   }
 }
 
-const app = new PortfolioApp();
+new App();
