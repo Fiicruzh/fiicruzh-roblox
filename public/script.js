@@ -3,18 +3,20 @@ class PortfolioApp {
     this.ws = null;
     this.avatarCtx = null;
     this.avatarImg = null;
+    this.isDragging = false;
+    this.lastX = 0;
+    this.lastY = 0;
+    this.rotationX = 0;
     this.rotationY = 0;
+    this.targetRotationX = 0;
     this.targetRotationY = 0;
-    this.lastWheel = 0;
-    this.currentItemsHash = '';
-    this.currentItemsCount = 0;
     this.retryCount = 0;
     this.init();
   }
 
   init() {
     this.setupCanvas();
-    this.loadAvatar2D();
+    this.loadAvatar3D();
     this.connectWebSocket();
     this.loadStats();
     this.loadItems();
@@ -22,84 +24,102 @@ class PortfolioApp {
   }
 
   setupCanvas() {
-    const canvas = document.getElementById('avatar2D');
+    const canvas = document.getElementById('avatar3D');
     this.avatarCtx = canvas.getContext('2d');
     
-    // Mouse wheel scroll for rotation
-    canvas.addEventListener('wheel', (e) => {
-      e.preventDefault();
-      const delta = e.deltaY * 0.3;
-      this.targetRotationY += delta;
-    });
+    // Drag events
+    canvas.addEventListener('mousedown', (e) => this.startDrag(e));
+    canvas.addEventListener('mousemove', (e) => this.drag(e));
+    canvas.addEventListener('mouseup', () => this.stopDrag());
+    canvas.addEventListener('mouseleave', () => this.stopDrag());
     
-    // Touch scroll support
-    let touchStartY = 0;
-    canvas.addEventListener('touchstart', (e) => {
-      touchStartY = e.touches[0].clientY;
-    });
-    
-    canvas.addEventListener('touchmove', (e) => {
-      const touchY = e.touches[0].clientY;
-      const delta = (touchStartY - touchY) * 2;
-      this.targetRotationY += delta;
-      touchStartY = touchY;
-      e.preventDefault();
-    });
+    // Touch support
+    canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
+    canvas.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
+    canvas.addEventListener('touchend', () => this.stopDrag());
   }
 
-  // 🔥 2D LIVE AVATAR WITH SCROLL ROTATION
-  async loadAvatar2D() {
+  startDrag(e) {
+    this.isDragging = true;
+    this.lastX = e.clientX;
+    this.lastY = e.clientY;
+    document.body.style.cursor = 'grabbing';
+  }
+
+  drag(e) {
+    if (!this.isDragging) return;
+    
+    const deltaX = e.clientX - this.lastX;
+    const deltaY = e.clientY - this.lastY;
+    
+    this.targetRotationY += deltaX * 0.5;
+    this.targetRotationX -= deltaY * 0.5;
+    
+    this.lastX = e.clientX;
+    this.lastY = e.clientY;
+  }
+
+  stopDrag() {
+    this.isDragging = false;
+    document.body.style.cursor = 'grab';
+  }
+
+  // 🔥 3D AVATAR 360° RENDER
+  async loadAvatar3D() {
     try {
       const res = await this.fetchWithRetry('/api/avatar');
       const data = await res.json();
       this.avatarImg = new Image();
       this.avatarImg.crossOrigin = 'anonymous';
-      this.avatarImg.onload = () => this.animate2D();
+      this.avatarImg.onload = () => this.animate3D();
       this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
     } catch (err) {
       console.error('Avatar load failed:', err);
       this.avatarImg = new Image();
       this.avatarImg.src = 'https://via.placeholder.com/200?text=ROBLOX';
-      this.animate2D();
+      this.animate3D();
     }
   }
 
-  animate2D() {
-    const canvas = document.getElementById('avatar2D');
+  animate3D() {
+    const canvas = document.getElementById('avatar3D');
     
     function render() {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Smooth rotation interpolation
-      app.rotationY += (app.targetRotationY - app.rotationY) * 0.12;
+      // Smooth rotation
+      app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
+      app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
       
-      // Auto slow rotation
-      app.targetRotationY += 0.2;
+      // Auto rotate when not dragging
+      if (!app.isDragging) {
+        app.targetRotationY += 0.3;
+      }
       
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       
-      // 2D Rotation effect
+      // 3D transformations
       ctx.rotate(app.rotationY * 0.01);
-      ctx.scale(1.05, 1.05);
+      ctx.scale(1.1, 0.95);
       
-      // Neon glow effect
-      ctx.shadowColor = 'cyan';
-      ctx.shadowBlur = 25;
-      
-      // Avatar lighting
-      const gradient = ctx.createRadialGradient(0, -25, 0, 0, 0, 120);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.6)');
-      gradient.addColorStop(0.4, 'rgba(0,255,255,0.2)');
+      // Lighting effect
+      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
+      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
       gradient.addColorStop(1, 'transparent');
       ctx.fillStyle = gradient;
       ctx.fillRect(-90, -90, 180, 180);
       
+      // Shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 10;
+      ctx.shadowOffsetY = 10;
+      
       // Draw avatar
-      if (app.avatarImg.complete && app.avatarImg.naturalWidth > 0) {
-        ctx.shadowBlur = 15;
-        ctx.shadowColor = 'rgba(0,255,255,0.8)';
+      if (app.avatarImg.complete) {
         ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
       }
       
@@ -152,27 +172,13 @@ class PortfolioApp {
       this.animate(document.getElementById("following"), data.following);
     }
     
-    // 🔥 SMART ITEMS UPDATE - ONLY IF CHANGED
     if (data.items) {
-      const newHash = this.calculateItemsHash(data.items);
-      const newCount = data.items.length;
-      
-      if (newHash !== this.currentItemsHash || newCount !== this.currentItemsCount) {
-        console.log('🔄 Items changed - updating display');
-        this.renderItems(data.items);
-        this.currentItemsHash = newHash;
-        this.currentItemsCount = newCount;
-      }
-      
+      this.renderItems(data.items);
       document.getElementById("totalValue").textContent = 
         `${data.totalValue?.toLocaleString() || 0} R$`;
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
-  }
-
-  calculateItemsHash(items) {
-    return items.map(item => `${item.name}-${item.price}`).join('|');
   }
 
   async fetchWithRetry(url, retries = 3) {
@@ -211,11 +217,6 @@ class PortfolioApp {
     try {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
-      
-      // Calculate initial hash
-      this.currentItemsHash = this.calculateItemsHash(data.items || []);
-      this.currentItemsCount = data.items?.length || 0;
-      
       this.renderItems(data.items || []);
       document.getElementById("totalValue").textContent = 
         `${(data.totalValue || 0).toLocaleString()} R$`;
@@ -287,8 +288,11 @@ class PortfolioApp {
       });
     };
 
-    // 🔥 NO AUTO REFRESH - Only WebSocket updates
-    console.log('🚀 Portfolio loaded - Live updates via WebSocket only');
+    // Auto refresh every 30s
+    setInterval(() => {
+      this.loadItems();
+      this.loadStats();
+    }, 30000);
   }
 }
 
@@ -296,5 +300,5 @@ class PortfolioApp {
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
-  document.getElementById('avatar2D').style.cursor = 'grab';
+  document.getElementById('avatar3D').style.cursor = 'grab';
 });
