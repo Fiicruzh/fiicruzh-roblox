@@ -95,10 +95,15 @@ class PortfolioApp {
   async fetchWithRetry(url, retries = 3) {
     for (let i = 0; i < retries; i++) {
       try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000);
+        
         const res = await fetch(url, { 
-          signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
-          cache: 'no-store'
+          cache: 'no-store',
+          signal: controller.signal
         });
+        clearTimeout(timeoutId);
+        
         if (res.ok) return res;
       } catch (err) {
         if (i === retries - 1) throw err;
@@ -124,3 +129,93 @@ class PortfolioApp {
     const container = document.getElementById("itemsContainer");
     container.innerHTML = Array(8).fill().map(() => 
       '<div class="loading-smooth"></div>'
+    ).join('');
+
+    try {
+      const res = await this.fetchWithRetry('/api/items');
+      const data = await res.json();
+      this.renderItems(data.items || []);
+      const itemsHash = JSON.stringify(data.items || []);
+      this.currentItemsHash = itemsHash;
+    } catch (err) {
+      console.error('Items failed:', err);
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
+    }
+  }
+
+  renderItems(items) {
+    const container = document.getElementById("itemsContainer");
+    if (!items?.length) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+      return;
+    }
+
+    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
+  }
+
+  getRarity(price) {
+    if (price > 10000) return "legendary";
+    if (price > 5000) return "epic";
+    if (price > 1000) return "rare";
+    return "";
+  }
+
+  createItemCard(item, index) {
+    const rarity = this.getRarity(item.price);
+    return `
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
+        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/333/ccc?text=?';this.onerror=null;" loading="lazy">
+        <div class="item-name">${item.name}</div>
+      </div>
+    `;
+  }
+
+  animate(el, end) {
+    end = Number(end) || 0;
+    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    const duration = 1000;
+    let startTime = null;
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const value = Math.floor(start + (end - start) * easeProgress);
+      el.textContent = value.toLocaleString();
+      
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  addInteractions() {
+    // Copy button
+    document.getElementById('copyBtn').onclick = () => {
+      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = '✅ Copied!';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+        }, 2000);
+      }).catch(() => {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      });
+    };
+  }
+}
+
+// Global app instance
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+  app = new PortfolioApp();
+});
