@@ -9,6 +9,48 @@
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+<style>
+.center-text {
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* BUTTON USERNAME */
+.copy-btn {
+  margin-top: 10px;
+  padding: 12px 18px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 10px;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+/* HOVER */
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
+}
+
+/* CLICK */
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+/* SUCCESS */
+.copy-btn.copied {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #000;
+  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
+}
+</style>
+
 </head>
 
 <body>
@@ -19,15 +61,27 @@
 <div class="container">
 <div class="card">
 
+<!-- HEADER -->
 <div class="header">
   <img class="profile" src="https://i.ibb.co.com/PXr3MG9/IMG-20260224-184119-293.webp">
-  <h1 class="glitch" data-text="FiiCruzh">FiiCruzh</h1>
+  <div class="name-box">
+    <h1 class="glitch" data-text="FiiCruzh">FiiCruzh</h1>
+  </div>
 </div>
 
+<!-- AVATAR -->
 <div class="avatar-box">
-  <img id="avatar" src="">
+  <img id="avatar" src="https://i.ibb.co.com/hFPZKf8P/1775477390710-Picsart-Background-Remover.png">
 </div>
 
+<!-- BUTTON USERNAME (UPDATED) -->
+<div class="center-text">
+  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
+    <i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4
+  </button>
+</div>
+
+<!-- STATS -->
 <div class="stats">
   <div class="stat"><h2 id="friends">0</h2><span>Koneksi</span></div>
   <div class="stat"><h2 id="followers">0</h2><span>Pengikut</span></div>
@@ -36,9 +90,41 @@
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
 
+<!-- ROBLOX ITEMS -->
 <div class="items-section">
   <h3 class="items-title">MY ROBLOX ITEMS</h3>
   <div class="items-container" id="itemsContainer"></div>
+</div>
+  
+<!-- SOCIAL -->
+<div class="icons">
+  <a href="https://www.tiktok.com/@fiicruzh?_r=1&_t=ZS-95GgJVlf4tT"><i class="fab fa-tiktok"></i></a>
+  <a href="https://Wa.me/62895386427676"><i class="fab fa-whatsapp"></i></a>
+  <a href="https://www.instagram.com/fiicruzh?igsh=MXI0cTNxZmR4b3M5aQ=="><i class="fab fa-instagram"></i></a>
+</div>
+
+<!-- BUTTON ROW -->
+<div class="button-row">
+
+  <a href="https://www.roblox.com/share?code=b1423bfc72d6994f928923bf723f5706&type=Profile&source=ProfileShare&stamp=1775337024296"
+     class="btn main-btn">
+    <i class="fas fa-user"></i> Add Roblox
+  </a>
+
+  <a href="https://i.ibb.co.com/KHK9T37/1775338572457.png"
+     target="_blank"
+     class="btn qr-btn">
+    <i class="fas fa-qrcode"></i>
+  </a>
+
+</div>
+
+<!-- DISCORD -->
+<div class="buttons">
+  <a href="https://discordapp.com/users/1446016822531981424" class="btn discord-btn">
+    <i class="fab fa-discord"></i>
+    <span>Add Discord</span>
+  </a>
 </div>
 
 </div>
