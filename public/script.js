@@ -27,13 +27,11 @@ class PortfolioApp {
     const canvas = document.getElementById('avatar3D');
     this.avatarCtx = canvas.getContext('2d');
     
-    // Drag events
     canvas.addEventListener('mousedown', (e) => this.startDrag(e));
     canvas.addEventListener('mousemove', (e) => this.drag(e));
     canvas.addEventListener('mouseup', () => this.stopDrag());
     canvas.addEventListener('mouseleave', () => this.stopDrag());
     
-    // Touch support
     canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
     canvas.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
     canvas.addEventListener('touchend', () => this.stopDrag());
@@ -64,7 +62,6 @@ class PortfolioApp {
     document.body.style.cursor = 'grab';
   }
 
-  // 🔥 3D AVATAR 360° RENDER
   async loadAvatar3D() {
     try {
       const res = await this.fetchWithRetry('/api/avatar');
@@ -88,23 +85,18 @@ class PortfolioApp {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Smooth rotation
       app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
       app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
       
-      // Auto rotate when not dragging
       if (!app.isDragging) {
         app.targetRotationY += 0.3;
       }
       
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
-      
-      // 3D transformations
       ctx.rotate(app.rotationY * 0.01);
       ctx.scale(1.1, 0.95);
       
-      // Lighting effect
       const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
       gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
       gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
@@ -112,14 +104,12 @@ class PortfolioApp {
       ctx.fillStyle = gradient;
       ctx.fillRect(-90, -90, 180, 180);
       
-      // Shadow
       ctx.shadowColor = 'rgba(0,0,0,0.5)';
       ctx.shadowBlur = 20;
       ctx.shadowOffsetX = 10;
       ctx.shadowOffsetY = 10;
       
-      // Draw avatar
-      if (app.avatarImg.complete) {
+      if (app.avatarImg?.complete) {
         ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
       }
       
@@ -129,7 +119,7 @@ class PortfolioApp {
     render();
   }
 
-  // 🔥 WEBSOCKET REAL-TIME UPDATE
+  // 🔥 FIXED: WebSocket - Better reconnection + complete data handling
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
@@ -143,6 +133,7 @@ class PortfolioApp {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
+        console.log('📡 Live update received:', data);
         this.updateLiveData(data);
       } catch (err) {
         console.error('WS parse error:', err);
@@ -154,28 +145,37 @@ class PortfolioApp {
       document.getElementById('liveIndicator').textContent = '🔴';
       this.smartReconnect();
     };
+
+    this.ws.onerror = (err) => {
+      console.log('WebSocket error:', err);
+    };
   }
 
   smartReconnect() {
     if (this.retryCount < 5) {
       setTimeout(() => {
         this.retryCount++;
+        console.log(`🔄 Reconnecting WebSocket... (${this.retryCount}/5)`);
         this.connectWebSocket();
       }, 2000 * this.retryCount);
     }
   }
 
+  // 🔥 FIXED: Complete data update - Handle all data types
   updateLiveData(data) {
     if (data.stats) {
-      this.animate(document.getElementById("friends"), data.stats.friends);
-      this.animate(document.getElementById("followers"), data.stats.followers);
-      this.animate(document.getElementById("following"), data.following);
+      this.animate(document.getElementById("friends"), data.stats.friends || 0);
+      this.animate(document.getElementById("followers"), data.stats.followers || 0);
+      this.animate(document.getElementById("following"), data.stats.following || 0);
     }
     
-    if (data.items) {
-      this.renderItems(data.items);
+    if (data.items !== undefined) {
+      this.renderItems(Array.isArray(data.items) ? data.items : []);
+    }
+    
+    if (data.totalValue !== undefined) {
       document.getElementById("totalValue").textContent = 
-        `${data.totalValue?.toLocaleString() || 0} R$`;
+        `${(data.totalValue || 0).toLocaleString()} R$`;
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
@@ -246,11 +246,11 @@ class PortfolioApp {
   createItemCard(item, index) {
     const rarity = this.getRarity(item.price);
     return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
-        <div class="item-name">${item.name}</div>
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null" loading="lazy">
+        <div class="item-name">${item.name || 'Unknown'}</div>
         <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
     `;
@@ -285,6 +285,14 @@ class PortfolioApp {
           btn.classList.remove('copied');
           btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
         }, 2000);
+      }).catch(() => {
+        // Fallback for older browsers
+        const textArea = document.createElement('textarea');
+        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
       });
     };
 
