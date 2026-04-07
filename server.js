@@ -94,7 +94,46 @@ app.get("/api/items", async (req,res)=>{
         88273993498454
       ];
     }
+    
+// 🔥 FULL INVENTORY ROBLOX
+app.get("/api/inventory", async (req,res)=>{
+  try{
+    const response = await fetch(
+      `https://inventory.roblox.com/v2/users/${USER_ID}/inventory?assetTypes=Hat,Face,Accessory,HairAccessory&limit=20&sortOrder=Desc`
+    );
 
+    const data = await response.json();
+
+    if(!data.data){
+      return res.json([]);
+    }
+
+    const ids = data.data.map(item=>item.assetId);
+
+    // thumbnail
+    const thumbRes = await fetch(
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png&isCircular=false`
+    );
+
+    const thumbData = await thumbRes.json();
+
+    const result = data.data.map((item,i)=>({
+      id: item.assetId,
+      name: item.name,
+      image: thumbData?.data?.[i]?.imageUrl,
+      link: `https://www.roblox.com/catalog/${item.assetId}`,
+      price: item.recentAveragePrice || 0,
+      limited: item.isLimited || false
+    }));
+
+    res.json(result);
+
+  }catch(err){
+    console.log("❌ INVENTORY ERROR:", err);
+    res.json([]);
+  }
+});
+    
     // 🔥 ambil thumbnail sekali
     const thumbRes = await fetch(
       "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
@@ -147,9 +186,21 @@ app.get("/api/items", async (req,res)=>{
 
 // 🔥 WEBSOCKET
 wss.on("connection", (ws)=>{
+
   const send = async ()=>{
-    const data = await getRobloxData();
-    ws.send(JSON.stringify(data));
+    const stats = await getRobloxData();
+
+    let items = [];
+
+    try{
+      const res = await fetch(`http://localhost:${PORT}/api/inventory`);
+      items = await res.json();
+    }catch(e){}
+
+    ws.send(JSON.stringify({
+      stats,
+      items
+    }));
   };
 
   send();
