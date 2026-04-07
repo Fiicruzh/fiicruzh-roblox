@@ -293,3 +293,15 @@ document.addEventListener('DOMContentLoaded', () => {
   container = document.getElementById('avatar2DContainer');
   container.style.cursor = 'grab';
 });
+
+updateLiveData(data) {
+  // ... kode existing ...
+  
+  if (data.type === 'items_update') {
+    console.log('🆕 Realtime items update received!');
+    document.getElementById('liveIndicator').style.animation = 'pulse 0.5s infinite';
+    setTimeout(() => {
+      document.getElementById('liveIndicator').style.animation = 'pulse 2s infinite';
+    }, 1000);
+  }
+}
