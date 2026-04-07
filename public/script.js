@@ -1,11 +1,11 @@
+const API = "/api";
+
 function getRarity(item){
   if(item.limited) return "legendary";
   if(item.price > 10000) return "epic";
   if(item.price > 1000) return "rare";
   return "common";
 }
-
-const API = "/api";
 
 // 🔥 ANIMASI ANGKA (ANTI NaN)
 function animate(el, end){
@@ -106,37 +106,21 @@ window.addEventListener("DOMContentLoaded", ()=>{
   loadItems();
 });
 
-function createCard(item, index){
+function createCard(item){
   const div = document.createElement("div");
-  div.className = "item-card";
+
+  const rarity = getRarity(item);
+
+  div.className = `item-card ${rarity}`;
 
   div.innerHTML = `
-    ${index === 0 ? '<div class="equipped">ON</div>' : ''}
-    <img src="${item.image}" onerror="this.src='https://via.placeholder.com/150'">
+    <img src="${item.image || 'https://via.placeholder.com/150'}">
     <div class="item-name">${item.name}</div>
+    ${item.price ? `<div style="font-size:9px;color:lime">${item.price} R$</div>` : ""}
+    ${item.limited ? `<div style="color:violet;font-size:9px">LIMITED</div>` : ""}
   `;
 
-  // klik → marketplace
-  div.onclick = ()=>{
-    window.open(item.link, "_blank");
-  };
-
-  // 3D TILT
-  div.addEventListener("mousemove", e=>{
-    const rect = div.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    div.style.transform = `
-      rotateX(${-(y-rect.height/2)/10}deg)
-      rotateY(${(x-rect.width/2)/10}deg)
-      scale(1.05)
-    `;
-  });
-
-  div.addEventListener("mouseleave", ()=>{
-    div.style.transform = "rotateX(0) rotateY(0)";
-  });
+  div.onclick = ()=> window.open(item.link,"_blank");
 
   return div;
 }
@@ -177,4 +161,16 @@ async function loadItems(){
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
-console.log("ITEM COUNT:", finalItems.length);
+
+async function loadAvatar(){
+  try{
+    const res = await fetch("/api/avatar");
+    const data = await res.json();
+
+    document.getElementById("avatar").src = data.avatar;
+  }catch(e){
+    console.log("AVATAR ERROR");
+  }
+}
+
+loadAvatar();
