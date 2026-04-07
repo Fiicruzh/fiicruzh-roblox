@@ -1,5 +1,8 @@
 const API = "/api";
 
+// ======================
+// 🔥 AVATAR
+// ======================
 async function loadAvatar(){
   try{
     const res = await fetch("/api/avatar");
@@ -8,12 +11,15 @@ async function loadAvatar(){
     if(data.image){
       document.getElementById("avatar").src = data.image;
     }
+
   }catch{
     console.log("Avatar gagal load");
   }
 }
 
-// 🔥 ANIMATE
+// ======================
+// 🔥 ANIMATE NUMBER
+// ======================
 function animate(el, end){
   end = Number(end) || 0;
 
@@ -38,7 +44,9 @@ function animate(el, end){
   requestAnimationFrame(step);
 }
 
-// 🔥 LOAD STATS FIX
+// ======================
+// 🔥 LOAD STATS (FIX 0 PALSU)
+// ======================
 async function loadStats(){
   try{
     const res = await fetch(API);
@@ -46,10 +54,9 @@ async function loadStats(){
 
     console.log("DATA:", data);
 
-    // 🔥 VALIDASI BIAR GAK 0 PALSU
-    const friends = data.friends ?? 0;
-    const followers = data.followers ?? 0;
-    const following = data.following ?? 0;
+    const friends = data?.friends ?? 0;
+    const followers = data?.followers ?? 0;
+    const following = data?.following ?? 0;
 
     animate(document.getElementById("friends"), friends);
     animate(document.getElementById("followers"), followers);
@@ -60,128 +67,50 @@ async function loadStats(){
   }
 }
 
-// 🔥 LOAD ITEMS
-async function loadItems(){
-  const container = document.getElementById("itemsContainer");
-  if(!container) return;
-
-  container.innerHTML = "";
-
-  for(let i=0;i<5;i++){
-    const sk = document.createElement("div");
-    sk.className = "skeleton";
-    container.appendChild(sk);
-  }
-
-  try{
-    const res = await fetch("/api/items");
-    const items = await res.json();
-
-    container.innerHTML = "";
-
-    const finalItems = (items && items.length) ? items : [
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
-    ];
-
-    finalItems.slice(0,20).forEach((item,i)=>{
-      const div = document.createElement("div");
-      div.className = "item-card";
-
-      div.innerHTML = `
-        <img src="${item.image}">
-        <div class="item-name">${item.name}</div>
-      `;
-
-      container.appendChild(div);
-    });
-
-  }catch{
-    container.innerHTML = "Gagal load";
-  }
-}
-
-// 🔥 INIT
-window.addEventListener("DOMContentLoaded", ()=>{
-  loadAvatar();
-  loadStats();
-  loadItems();
-});
-
-// 🔥 AUTO REFRESH
-setInterval(loadStats, 5000);
-
-// 🔥 EFEK KLIK BUTTON
-document.querySelectorAll(".buttons a").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    btn.style.transform = "scale(0.9)";
-    setTimeout(()=>{
-      btn.style.transform = "scale(1.05)";
-    },150);
-  });
-});
-
-// 🔥 HOVER ICON LEBIH HIDUP
-document.querySelectorAll(".icons a").forEach(icon=>{
-  icon.addEventListener("mouseenter", ()=>{
-    icon.style.transform = "scale(1.3) rotate(8deg)";
-  });
-
-  icon.addEventListener("mouseleave", ()=>{
-    icon.style.transform = "scale(1)";
-  });
-});
-
-// 🔥 AVATAR INTERAKTIF (FOLLOW MOUSE)
-const avatar = document.getElementById("avatar");
-
-if(avatar){
-  document.addEventListener("mousemove", (e)=>{
-    let x = (window.innerWidth / 2 - e.clientX) / 25;
-    let y = (window.innerHeight / 2 - e.clientY) / 25;
-
-    avatar.style.transform = `rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
-  });
-
-  document.addEventListener("mouseleave", ()=>{
-    avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
-  });
-}
-
-// ============================
-// 🔥 ROBLOX ITEMS FINAL SYSTEM
-// ============================
-
-window.addEventListener("DOMContentLoaded", ()=>{
-  loadItems();
-  loadAvatar(); // 🔥 TAMBAH INI
-});
-
+// ======================
+// 🔥 RARITY SYSTEM
+// ======================
 function getRarity(price){
+  price = Number(price) || 0;
+
   if(price > 10000) return "legendary";
   if(price > 5000) return "epic";
   if(price > 1000) return "rare";
   return "normal";
 }
 
+// ======================
+// 🔥 CREATE ITEM CARD (ANTI UNDEFINED)
+// ======================
 function createCard(item, index){
-  const rarity = getRarity(item.price);
+
+  const safeName = item?.name || "Unknown Item";
+  const safeImage = item?.image || "https://via.placeholder.com/150";
+  const safePrice = item?.price || 0;
+  const safeLink = item?.link || "#";
+  const safeLimited = item?.limited || false;
+
+  const rarity = getRarity(safePrice);
 
   const div = document.createElement("div");
   div.className = `item-card ${rarity}`;
 
   div.innerHTML = `
     ${index === 0 ? '<div class="equipped">ON</div>' : ''}
-    ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-    <img src="${item.image}">
-    <div class="item-name">${item.name}</div>
-    <div class="item-price">${item.price} R$</div>
+    ${safeLimited ? '<div class="limited">LIMITED</div>' : ''}
+    <img src="${safeImage}">
+    <div class="item-name">${safeName}</div>
+    <div class="item-price">${safePrice} R$</div>
   `;
 
-  div.onclick = ()=> window.open(item.link);
+  div.onclick = ()=> window.open(safeLink);
 
   return div;
 }
 
+// ======================
+// 🔥 LOAD ITEMS (FINAL FIX)
+// ======================
 async function loadItems(){
   const container = document.getElementById("itemsContainer");
   if(!container) return;
@@ -200,13 +129,11 @@ async function loadItems(){
 
     container.innerHTML = "";
 
-    // fallback kalau kosong
+    // 🔥 fallback kalau kosong / rusak
     const finalItems = (items && items.length) ? items : [
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
+      {name:"No Item", image:"https://via.placeholder.com/150", price:0, link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", price:0, link:"#"},
+      {name:"No Item", image:"https://via.placeholder.com/150", price:0, link:"#"}
     ];
 
     finalItems.slice(0,20).forEach((item,i)=>{
@@ -218,3 +145,52 @@ async function loadItems(){
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
+
+// ======================
+// 🔥 INIT (SATU KALI AJA)
+// ======================
+window.addEventListener("DOMContentLoaded", ()=>{
+  loadAvatar();
+  loadStats();
+  loadItems();
+
+  // 🔥 BUTTON EFFECT
+  document.querySelectorAll(".buttons a").forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      btn.style.transform = "scale(0.9)";
+      setTimeout(()=>{
+        btn.style.transform = "scale(1.05)";
+      },150);
+    });
+  });
+
+  // 🔥 ICON HOVER
+  document.querySelectorAll(".icons a").forEach(icon=>{
+    icon.addEventListener("mouseenter", ()=>{
+      icon.style.transform = "scale(1.3) rotate(8deg)";
+    });
+
+    icon.addEventListener("mouseleave", ()=>{
+      icon.style.transform = "scale(1)";
+    });
+  });
+
+  // 🔥 AVATAR INTERAKTIF
+  const avatar = document.getElementById("avatar");
+
+  if(avatar){
+    document.addEventListener("mousemove", (e)=>{
+      let x = (window.innerWidth / 2 - e.clientX) / 25;
+      let y = (window.innerHeight / 2 - e.clientY) / 25;
+
+      avatar.style.transform = `rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
+    });
+
+    document.addEventListener("mouseleave", ()=>{
+      avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
+    });
+  }
+});
+
+// 🔥 AUTO REFRESH
+setInterval(loadStats, 5000);
