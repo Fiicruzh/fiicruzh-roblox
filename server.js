@@ -12,8 +12,9 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 
-// Railway fix - handle all ports
+// FIXED: Proper port detection
 const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
+const HOST = process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : `http://localhost:${PORT}`;
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ 
   server,
@@ -21,7 +22,7 @@ const wss = new WebSocket.Server({
 });
 
 // Static files
-app.use(express.static(path.join(__dirname, "public")));
+app.use(express.static(path.join(__dirname, "public"))));
 
 // Roblox User ID
 const USER_ID = 8941948601;
@@ -31,14 +32,13 @@ let cachedData = {
   lastUpdate: 0
 };
 
-// Cache duration 30 seconds
 const CACHE_DURATION = 30000;
 
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
-      setTimeout(() => controller.abort(), 10000);
+      setTimeout(() => controller.abort(), 15000);
       
       const response = await fetch(url, {
         signal: controller.signal
@@ -60,6 +60,8 @@ app.get("/api", async (req, res) => {
       return res.json(cachedData.stats);
     }
 
+    console.log('🔄 Fetching stats...');
+    
     const [friendsRes, followersRes, followingRes] = await Promise.allSettled([
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
@@ -96,6 +98,7 @@ app.get("/api", async (req, res) => {
     cachedData.stats = stats;
     cachedData.lastUpdate = now;
 
+    console.log(`✅ Stats updated: ${JSON.stringify(stats)}`);
     broadcast({ stats });
     res.json(stats);
 
@@ -112,6 +115,8 @@ app.get("/api/avatar", async (req, res) => {
     );
     
     const avatar = await avatarRes.json();
+    console.log('✅ Avatar loaded');
+    
     res.json({
       image: avatar.data?.[0]?.imageUrl || null
     });
@@ -126,10 +131,11 @@ app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
     
+    console.log('🔄 Fetching items...');
+    
     if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
-      return res.json({
-        items: cachedData.items
-      });
+      console.log('📦 Using cached items');
+      return res.json({ items: cachedData.items });
     }
 
     const wearRes = await fetchWithRetry(
@@ -138,14 +144,16 @@ app.get("/api/items", async (req, res) => {
     
     const wear = await wearRes.json();
     let ids = wear.assetIds || [];
+    console.log(`👕 Found ${ids.length} equipped items`);
     
     if (ids.length === 0) {
       cachedData.items = [];
       cachedData.lastUpdate = now;
+      console.log('📦 No items equipped');
       return res.json({ items: [] });
     }
 
-    ids = ids.slice(0, 20); // Limit 20 items
+    ids = ids.slice(0, 20);
 
     // Get thumbnails
     let thumbs = [];
@@ -161,7 +169,8 @@ app.get("/api/items", async (req, res) => {
     // Process items
     const result = [];
     
-    for (const id of ids) {
+    for (let i = 0; i < Math.min(ids.length, 12); i++) {
+      const id = ids[i];
       try {
         const detailRes = await fetchWithRetry(
           `https://economy.roblox.com/v2/assets/${id}/details`
@@ -178,12 +187,13 @@ app.get("/api/items", async (req, res) => {
         };
 
         result.push(item);
+        console.log(`✅ Item ${i+1}: ${item.name}`);
 
       } catch (itemErr) {
-        console.log(`Item ${id} error:`, itemErr);
+        console.log(`⚠️ Item ${id} error:`, itemErr.message);
         result.push({
           name: `Item #${id}`,
-          image: `https://via.placeholder.com/150x150/333/ccc?text=ID${id}`,
+          image: `https://via.placeholder.com/150x150/333/ccc?text=ID${id.substring(0,4)}`,
           link: `https://www.roblox.com/catalog/${id}`,
           limited: false
         });
@@ -193,16 +203,20 @@ app.get("/api/items", async (req, res) => {
     cachedData.items = result;
     cachedData.lastUpdate = now;
 
+    console.log(`✅ Items loaded: ${result.length} items`);
     broadcast({ items: result });
     res.json({ items: result });
 
   } catch (err) {
     console.error("Items error:", err);
-    res.json({ items: cachedData.items });
+    res.status(500).json({ items: cachedData.items });
   }
 });
 
 function broadcast(data) {
+  const count = wss.clients.size;
+  console.log(`📡 Broadcasting to ${count} clients:`, data);
+  
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       try {
@@ -215,47 +229,69 @@ function broadcast(data) {
 }
 
 wss.on('connection', (ws) => {
-  console.log('👤 WebSocket client connected');
+  console.log('👤 WebSocket client connected. Total:', wss.clients.size);
+  
+  // Send cached data immediately
   ws.send(JSON.stringify(cachedData));
 
   ws.on('close', () => {
-    console.log('👋 WebSocket client disconnected');
+    console.log('👋 WebSocket client disconnected. Total:', wss.clients.size);
   });
 
   ws.on('error', (err) => {
-    console.log('WebSocket error:', err);
+    console.log('WebSocket error:', err.message);
   });
 });
 
-// AUTO UPDATE EVERY 30 SECONDS
+// 🔥 FIXED AUTO UPDATE - NO LOCALHOST
 setInterval(async () => {
-  console.log('🔄 Updating data...');
+  console.log('🔄 Auto refresh started...');
   try {
-    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`, { method: 'HEAD' });
-    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`, { method: 'HEAD' });
-    broadcast(cachedData);
-    console.log('✅ Data updated');
+    // Update stats
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api')
+      ?.route?.stack[0]?.handle?.call({ app }, { url: '/api?_t=' + Date.now() }, { json: () => {} });
+    
+    // Update items  
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api/items')
+      ?.route?.stack[0]?.handle?.call({ app }, { url: '/api/items?_t=' + Date.now() }, { json: () => {} });
+    
+    console.log('✅ Auto refresh completed');
   } catch (err) {
-    console.error('Auto update failed:', err);
+    console.error('⚠️ Auto refresh warning:', err.message);
   }
 }, 30000);
 
+// SPA ROUTING
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: Date.now() });
+  res.json({ 
+    status: 'OK', 
+    timestamp: Date.now(),
+    clients: wss.clients.size,
+    cachedItems: cachedData.items.length 
+  });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('✅ Railway ready!');
+  console.log(`🚀 Server running on http://0.0.0.0:${PORT}`);
+  console.log(`🌐 Public URL: ${HOST}`);
+  console.log(`✅ Deployed successfully!`);
+  console.log(`📦 Cached items: ${cachedData.items.length}`);
 });
 
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down...');
+  console.log('🛑 Graceful shutdown...');
   server.close(() => {
+    console.log('✅ Server closed');
     process.exit(0);
   });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received...');
+  process.exit(0);
 });
