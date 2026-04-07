@@ -24,11 +24,10 @@
   </div>
 </div>
 
-<!-- 3D AVATAR CONTAINER -->
+<!-- 3D 360° AVATAR -->
 <div class="avatar-box">
-  <div id="avatarContainer">
-    <!-- Three.js akan render di sini -->
-  </div>
+  <canvas id="avatar3D" width="200" height="200"></canvas>
+  <div class="drag-hint">🖱️ Drag to rotate</div>
 </div>
 
 <!-- BUTTON USERNAME -->
@@ -46,6 +45,11 @@
 </div>
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
+
+<!-- TOTAL VALUE -->
+<div class="total-value">
+  <h4>Total Inventory: <span id="totalValue">0 R$</span></h4>
+</div>
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
@@ -81,9 +85,6 @@
 </div>
 </div>
 
-<!-- Three.js CDN -->
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
