@@ -1,14 +1,14 @@
-// 🔥 LOAD AVATAR
 async function loadAvatar(){
   try{
     const res = await fetch("/api/avatar");
     const data = await res.json();
 
-    if(data.avatar){
-      document.getElementById("avatar").src = data.avatar;
+    if(data.image){
+      document.getElementById("avatar").src = data.image;
     }
-  }catch(err){
-    console.log("Avatar error:", err);
+
+  }catch{
+    console.log("Avatar gagal load");
   }
 }
 
@@ -111,13 +111,24 @@ if(avatar){
 
 window.addEventListener("DOMContentLoaded", ()=>{
   loadItems();
+  loadAvatar(); // 🔥 TAMBAH INI
 });
 
+function getRarity(price){
+  if(price > 10000) return "legendary";
+  if(price > 5000) return "epic";
+  if(price > 1000) return "rare";
+  return "normal";
+}
+
 function createCard(item, index){
+  const rarity = getRarity(item.price);
+
   const div = document.createElement("div");
-  div.className = "item-card " + item.rarity;
+  div.className = `item-card ${rarity}`;
 
   div.innerHTML = `
+    ${index === 0 ? '<div class="equipped">ON</div>' : ''}
     ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
     <img src="${item.image}">
     <div class="item-name">${item.name}</div>
@@ -165,8 +176,3 @@ async function loadItems(){
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
-
-window.addEventListener("DOMContentLoaded", ()=>{
-  loadItems();
-  loadAvatar(); // 🔥 TAMBAH INI
-});
