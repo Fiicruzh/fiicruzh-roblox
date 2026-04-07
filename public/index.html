@@ -7,6 +7,7 @@
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 
 <body>
@@ -24,10 +25,9 @@
   </div>
 </div>
 
-<!-- 3D 360° AVATAR -->
+<!-- 🎮 3D AVATAR THREE.JS -->
 <div class="avatar-box">
-  <canvas id="avatar3D" width="200" height="200"></canvas>
-  <div class="drag-hint">🖱️ Drag to rotate</div>
+  <div id="avatarContainer"></div>
 </div>
 
 <!-- BUTTON USERNAME -->
@@ -45,11 +45,6 @@
 </div>
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
-
-<!-- TOTAL VALUE -->
-<div class="total-value">
-  <h4>Total Inventory: <span id="totalValue">0 R$</span></h4>
-</div>
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
