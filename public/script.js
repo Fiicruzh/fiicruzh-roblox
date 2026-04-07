@@ -41,25 +41,15 @@ function animate(el, end){
 // 🔥 LOAD DATA ROBLOX (ANTI ERROR)
 async function loadStats(){
   try{
-    const res = await fetch(API);
-
-    if(!res.ok) throw new Error("API ERROR");
-
+    const res = await fetch("/api");
     const data = await res.json();
-
-    console.log("DATA ROBLOX:", data); // debug
 
     animate(document.getElementById("friends"), data.friends);
     animate(document.getElementById("followers"), data.followers);
     animate(document.getElementById("following"), data.following);
 
   }catch(err){
-    console.error("GAGAL LOAD:", err);
-
-    // fallback kalau error
-    animate(document.getElementById("friends"), 0);
-    animate(document.getElementById("followers"), 0);
-    animate(document.getElementById("following"), 0);
+    console.log("fallback stats gagal", err);
   }
 }
 
@@ -159,35 +149,18 @@ async function loadItems(){
   const container = document.getElementById("itemsContainer");
   if(!container) return;
 
-  // skeleton loading
   container.innerHTML = "";
-  for(let i=0;i<5;i++){
-    const sk = document.createElement("div");
-    sk.className = "skeleton";
-    container.appendChild(sk);
-  }
 
   try{
     const res = await fetch("/api/items");
     const items = await res.json();
 
-    container.innerHTML = "";
+    console.log("ITEMS:", items);
 
-    // fallback kalau kosong
-    const finalItems = (items && items.length) ? items : [
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"},
-      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
-    ];
-
-    finalItems.slice(0,20).forEach((item,i)=>{
-      container.appendChild(createCard(item,i));
-    });
+    renderItems(items);
 
   }catch(err){
-    console.log("ITEM ERROR:", err);
+    console.log("fallback item gagal", err);
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
@@ -234,12 +207,8 @@ async function loadStats(){
   }
 }
 
-async function loadItems(){
-  try{
-    const res = await fetch("/api/items");
-    const items = await res.json();
-    renderItems(items);
-  }catch{
-    console.log("fallback item gagal");
-  }
-}
+window.addEventListener("DOMContentLoaded", ()=>{
+  loadAvatar();
+  loadStats();
+  loadItems();
+});
