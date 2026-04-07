@@ -107,14 +107,14 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* 2D LIVE AVATAR */
+/* AVATAR 3D */
 .avatar-box{
   text-align:center;
   margin-top:12px;
   perspective: 1000px;
 }
 
-#avatar2D{
+#avatar3D{
   width:180px;
   height:180px;
   border-radius:12px;
@@ -122,7 +122,7 @@ body{
   cursor: grab;
 }
 
-#avatar2D:active{
+#avatar3D:active{
   cursor: grabbing;
 }
 
@@ -348,7 +348,7 @@ body{
   content:"";
   position:absolute;
   inset:-2px;
-  background:linear-gradient(45px, cyan, blue, cyan);
+  background:linear-gradient(45deg, cyan, blue, cyan);
   filter:blur(10px);
   z-index:-1;
   opacity:0.8;
@@ -453,7 +453,9 @@ body{
   100%{left:100%;}
 }
 
-/* 2D AVATAR ENHANCED */
+/* ... keep all previous CSS ... */
+
+/* 3D AVATAR ENHANCED */
 .drag-hint {
   font-size: 10px;
   color: #0ff;
@@ -470,3 +472,5 @@ body{
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* ... rest of CSS stays same ... */
