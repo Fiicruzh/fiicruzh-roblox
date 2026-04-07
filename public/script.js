@@ -1,170 +1,126 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.scene = null;
-    this.camera = null;
-    this.renderer = null;
-    this.mesh = null;
-    this.isDragging = false;
-    this.rotationY = 0;
-    this.targetRotationY = 0;
+    this.currentStats = { friends: -1, followers: -1, following: -1 };
+    this.currentItemsHash = '';
+    this.retryCount = 0;
     this.init();
   }
 
   init() {
-    this.setup3D();
-    this.connectWS();
-    this.copyBtn();
-    this.loadData();
+    this.loadAvatar();
+    this.connectWebSocket();
+    this.loadStats();
+    this.loadItems();
+    this.addInteractions();
   }
 
-  setup3D() {
-    const canvas = document.getElementById('avatar3D');
-    const container = document.getElementById('avatarContainer');
-
-    // Scene
-    this.scene = new THREE.Scene();
-    
-    // Camera
-    this.camera = new THREE.PerspectiveCamera(50, 1, 0.1, 100);
-    this.camera.position.z = 3;
-    
-    // Renderer
-    this.renderer = new THREE.WebGLRenderer({ 
-      canvas, 
-      alpha: true, 
-      antialias: true 
-    });
-    this.renderer.setSize(200, 200);
-    
-    // Lights
-    this.scene.add(new THREE.AmbientLight(0x404040));
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(1, 1, 1);
-    this.scene.add(light);
-
-    // Avatar model (ROBLOX HEAD)
-    const geometry = new THREE.SphereGeometry(0.8, 32, 32);
-    const material = new THREE.MeshPhongMaterial({ 
-      color: 0x00ffff,
-      shininess: 100 
-    });
-    this.mesh = new THREE.Mesh(geometry, material);
-    this.mesh.position.y = 0.2;
-    this.scene.add(this.mesh);
-
-    // Animate
-    this.animate();
-    
-    // Drag
-    canvas.addEventListener('mousedown', (e) => {
-      this.isDragging = true;
-      canvas.style.cursor = 'grabbing';
-    });
-    canvas.addEventListener('mousemove', (e) => {
-      if (this.isDragging) {
-        this.targetRotationY += e.movementX * 0.01;
-      }
-    });
-    canvas.addEventListener('mouseup', () => {
-      this.isDragging = false;
-      canvas.style.cursor = 'grab';
-    });
-  }
-
-  animate() {
-    requestAnimationFrame(() => this.animate());
-    
-    // Smooth rotation
-    this.rotationY += (this.targetRotationY - this.rotationY) * 0.1;
-    if (!this.isDragging) this.targetRotationY += 0.005;
-    
-    this.mesh.rotation.y = this.rotationY;
-    this.renderer.render(this.scene, this.camera);
-  }
-
-  async loadData() {
+  // Simple avatar load - NO 3D
+  async loadAvatar() {
     try {
-      const [statsRes, itemsRes] = await Promise.all([
-        fetch('/api'),
-        fetch('/api/items')
-      ]);
-      
-      const stats = await statsRes.json();
-      const itemsData = await itemsRes.json();
-      
-      // Update stats
-      this.animateNumber('friends', stats.friends);
-      this.animateNumber('followers', stats.followers);
-      this.animateNumber('following', stats.following);
-      
-      // Update items
-      this.renderItems(itemsData.items);
-      
+      const res = await fetch('/api/avatar');
+      const data = await res.json();
+      const img = document.getElementById('avatarImg');
+      img.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
     } catch (err) {
-      console.error('Load error:', err);
+      console.error('Avatar load failed:', err);
     }
   }
 
-  connectWS() {
-    const ws = new WebSocket(`${location.protocol === 'wss:' ? 'wss' : 'ws'}://${location.host}/websocket`);
-    this.ws = ws;
+  // 🔥 WEBSOCKET - UPDATE ONLY IF CHANGED
+  connectWebSocket() {
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
+    this.ws = new WebSocket(wsUrl);
     
-    ws.onmessage = (e) => {
-      const data = JSON.parse(e.data);
-      if (data.stats) {
-        this.animateNumber('friends', data.stats.friends);
-        this.animateNumber('followers', data.stats.followers);
-        this.animateNumber('following', data.stats.following);
+    this.ws.onopen = () => {
+      console.log('✅ WebSocket connected');
+      document.getElementById('liveIndicator').textContent = '🟢';
+      this.retryCount = 0;
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.updateLiveData(data);
+      } catch (err) {
+        console.error('WS parse error:', err);
       }
-      if (data.items) this.renderItems(data.items);
+    };
+
+    this.ws.onclose = () => {
+      console.log('❌ WebSocket disconnected');
+      document.getElementById('liveIndicator').textContent = '🔴';
+      this.smartReconnect();
     };
   }
 
-  animateNumber(id, target) {
-    const el = document.getElementById(id);
-    let start = parseInt(el.textContent) || 0;
-    const duration = 800;
-    let startTime = null;
-    
-    const step = (time) => {
-      if (!startTime) startTime = time;
-      const progress = Math.min((time - startTime) / duration, 1);
-      el.textContent = Math.floor(start + (target - start) * progress).toLocaleString();
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
+  smartReconnect() {
+    if (this.retryCount < 5) {
+      setTimeout(() => {
+        this.retryCount++;
+        this.connectWebSocket();
+      }, 2000 * this.retryCount);
+    }
   }
 
-  renderItems(items) {
-    const container = document.getElementById('itemsContainer');
-    if (!items || items.length === 0) {
-      container.innerHTML = '<div style="padding:20px;color:#666;font-size:12px">No items</div>';
-      return;
+  // 🔥 UPDATE ONLY IF DATA CHANGED
+  updateLiveData(data) {
+    // Update stats only if changed
+    if (data.stats) {
+      const statsChanged = 
+        data.stats.friends !== this.currentStats.friends ||
+        data.stats.followers !== this.currentStats.followers ||
+        data.stats.following !== this.currentStats.following;
+      
+      if (statsChanged) {
+        this.animate(document.getElementById("friends"), data.stats.friends);
+        this.animate(document.getElementById("followers"), data.stats.followers);
+        this.animate(document.getElementById("following"), data.stats.following);
+        this.currentStats = { ...data.stats };
+      }
     }
     
-    container.innerHTML = items.map((item, i) => `
-      <div class="item-card" onclick="window.open('${item.link}')">
-        ${i === 0 ? '<div class="equipped">ON</div>' : ''}
-        ${item.limited ? '<div class="limited">★</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?'">
-        <div class="item-name">${item.name}</div>
-      </div>
-    `).join('');
+    // Update items only if changed
+    if (data.items) {
+      const itemsHash = JSON.stringify(data.items);
+      if (itemsHash !== this.currentItemsHash && itemsHash !== '[]') {
+        this.renderItems(data.items);
+        this.currentItemsHash = itemsHash;
+      }
+    }
+    
+    document.getElementById('liveIndicator').textContent = '🟢';
   }
 
-  copyBtn() {
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4');
-      const btn = document.getElementById('copyBtn');
-      btn.textContent = '✅ Copied!';
-      btn.style.background = '#00ff88';
-      setTimeout(() => {
-        btn.textContent = 'NSSxFiiCruzh | @dapaarowr4';
-        btn.style.background = '';
-      }, 1500);
-    };
+  async fetchWithRetry(url, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, { 
+          signal: AbortSignal.timeout ? AbortSignal.timeout(10000) : undefined,
+          cache: 'no-store'
+        });
+        if (res.ok) return res;
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
   }
-}
 
-new PortfolioApp();
+  async loadStats() {
+    try {
+      const res = await this.fetchWithRetry('/api');
+      const data = await res.json();
+      this.animate(document.getElementById("friends"), data.friends || 0);
+      this.animate(document.getElementById("followers"), data.followers || 0);
+      this.animate(document.getElementById("following"), data.following || 0);
+      this.currentStats = { ...data };
+    } catch (err) {
+      console.error('Stats failed:', err);
+    }
+  }
+
+  async loadItems() {
+    const container = document.getElementById("itemsContainer");
+    container.innerHTML = Array(8).fill().map(() => 
+      '<div class="loading-smooth"></div>'
