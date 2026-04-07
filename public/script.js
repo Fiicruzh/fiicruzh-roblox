@@ -128,16 +128,19 @@ class PortfolioApp {
     return;
   }
 
-  container.innerHTML = items.map((item, i) => `
-    <div class="item-card" onclick="window.open('${item.link}', '_blank')">
-      ${i < 3 ? '<div class="equipped">ON</div>' : ''}
-      <img src="${item.image}" 
-           onerror="this.src='https://via.placeholder.com/90x70/333/fff?text=?'; this.onerror=null"
-           loading="lazy"
-           alt="${item.name}">
-      <div class="item-name">${item.name}</div>
-    </div>
-  `).join('');
+  container.innerHTML = items.map((item, i) => {
+    return `
+      <div class="item-card" onclick="window.open('${item.link}', '_blank')">
+        ${i < 4 ? '<div class="equipped">ON</div>' : ''}
+        <img src="${item.image}" 
+             onerror="this.onerror=null;this.src='https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓';"
+             loading="lazy"
+             alt="${item.name}"
+             style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);">
+        <div class="item-name">${item.name}</div>
+      </div>
+    `;
+  }).join('');
 }
 
   animate(el, end) {
