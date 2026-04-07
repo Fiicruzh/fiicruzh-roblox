@@ -235,18 +235,22 @@ wss.on('connection', (ws) => {
   });
 });
 
-// ==========================
-// 🔥 AUTO REFRESH CACHE (5 menit)
-// ==========================
+// 🔥 AUTO UPDATE EVERY 30 SECONDS - REAL TIME
 setInterval(async () => {
-  console.log('🔄 Auto refresh cache...');
+  console.log('🔄 LIVE UPDATE: Refreshing data...');
   try {
-    await fetch(`http://localhost:${PORT}/api`);
-    await fetch(`http://localhost:${PORT}/api/items`);
+    // Force refresh stats & items
+    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`);
+    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`);
+    
+    // Broadcast to ALL clients INSTANTLY
+    broadcast(cachedData);
+    console.log('✅ LIVE UPDATE: Data refreshed & broadcasted');
+    document.getElementById('liveIndicator').textContent = '🟢'; // Client side
   } catch (err) {
-    console.log('Auto refresh failed:', err);
+    console.error('Auto update failed:', err);
   }
-}, 300000); // 5 minutes
+}, 30000); // 30 seconds
 
 // ==========================
 // 🔥 RAILWAY/SPA ROUTING
