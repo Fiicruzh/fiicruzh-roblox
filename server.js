@@ -136,5 +136,49 @@ app.get("*", (req,res)=>{
   res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
+app.get("/api/user/:username", async (req,res)=>{
+  try{
+    const username = req.params.username;
+
+    const data = await fetch("https://users.roblox.com/v1/usernames/users",{
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        usernames:[username]
+      })
+    }).then(r=>r.json());
+
+    res.json({
+      id: data.data?.[0]?.id || null
+    });
+
+  }catch{
+    res.json({id:null});
+  }
+});
+
 const PORT = process.env.PORT || 3000;
+async function broadcast(){
+  try{
+    const stats = await fetch(`http://127.0.0.1:${PORT}/api`)
+    const items = await fetch(`http://localhost:${PORT}/api/items`).then(r=>r.json());
+
+    wss.clients.forEach(client=>{
+      if(client.readyState === 1){
+        client.send(JSON.stringify({
+          type:"stats",
+          ...stats
+        }));
+
+        client.send(JSON.stringify({
+          type:"items",
+          items
+        }));
+      }
+    });
+
+  }catch{}
+}
+
+setInterval(broadcast, 5000);
 server.listen(PORT, ()=>console.log("SERVER LIVE ⚡"));
