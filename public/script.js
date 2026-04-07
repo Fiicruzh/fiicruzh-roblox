@@ -1,109 +1,104 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.avatarCtx = null;
     this.avatarImg = null;
     this.isDragging = false;
     this.lastX = 0;
     this.lastY = 0;
-    
-    // 2D ROBLOX SMOOTH ROTATION
     this.rotationY = 0;
     this.targetRotationY = 0;
-    this.rotationSpeed = 0.08;
-    this.autoRotateSpeed = 0.3;
-    
-    // ✅ SMART ITEMS TRACKING - NO CONSTANT REFRESH
-    this.currentItemsHash = '';
-    this.lastItemsUpdate = 0;
-    this.itemsCheckInterval = null;
-    
+    this.velocityY = 0;
+    this.lastItemsHash = '';
+    this.lastStatsHash = '';
     this.retryCount = 0;
     this.init();
   }
 
   init() {
-    this.setupCanvas();
+    this.setupAvatar2D();
     this.loadAvatar2D();
     this.connectWebSocket();
     this.loadStats();
-    this.loadItemsSmart();
+    this.loadItems();
     this.addInteractions();
   }
 
-  setupCanvas() {
-    const canvas = document.getElementById('avatar2D');
-    this.avatarCtx = canvas.getContext('2d');
-    
-    // Drag events - ULTRA SMOOTH 360°
-    canvas.addEventListener('mousedown', (e) => this.startDrag(e));
-    canvas.addEventListener('mousemove', (e) => this.drag(e));
-    canvas.addEventListener('mouseup', () => this.stopDrag());
-    canvas.addEventListener('mouseleave', () => this.stopDrag());
-    
-    // Touch support - Mobile smooth scroll
-    canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
-    canvas.addEventListener('touchmove', (e) => {
+  // 🔥 2D ROBLOX AVATAR - SMOOTH 360° SCROLL (KIRI KANAN DEPAN BELAKANG)
+  setupAvatar2D() {
+    const container = document.getElementById('avatar2DContainer');
+    const avatar = document.getElementById('avatar2D');
+
+    // Mouse drag
+    container.addEventListener('mousedown', (e) => this.startDrag(e));
+    container.addEventListener('mousemove', (e) => this.drag(e));
+    container.addEventListener('mouseup', () => this.stopDrag());
+    container.addEventListener('mouseleave', () => this.stopDrag());
+
+    // Touch support
+    container.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
+    container.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
+    container.addEventListener('touchend', () => this.stopDrag());
+
+    // 🔥 MOUSE WHEEL SMOOTH SCROLL (KIRI KANAN)
+    container.addEventListener('wheel', (e) => {
       e.preventDefault();
-      this.drag(e.touches[0]);
+      this.targetRotationY += e.deltaY * 0.5;
+      this.velocityY = e.deltaY * 0.3;
     });
-    canvas.addEventListener('touchend', () => this.stopDrag());
+
+    // Smooth physics animation loop
+    const animate = () => {
+      // Ultra smooth interpolation
+      this.rotationY += (this.targetRotationY - this.rotationY) * 0.15;
+      this.velocityY *= 0.94; // Friction
+      this.targetRotationY += this.velocityY;
+
+      // Normalize rotation (360° loop)
+      this.rotationY = ((this.rotationY % 360) + 360) % 360;
+
+      // Apply smooth 3D rotation
+      avatar.style.transform = `rotateY(${this.rotationY}deg) scale(1.05)`;
+
+      requestAnimationFrame(animate);
+    };
+    animate();
   }
 
   startDrag(e) {
     this.isDragging = true;
     this.lastX = e.clientX;
-    this.lastY = e.clientY;
-    document.body.style.cursor = 'grabbing';
-    this.autoRotateSpeed = 0;
+    container.classList.add('dragging');
   }
 
   drag(e) {
     if (!this.isDragging) return;
     
     const deltaX = e.clientX - this.lastX;
-    this.targetRotationY += deltaX * 0.8;
-    
+    this.targetRotationY += deltaX * 1.2;
     this.lastX = e.clientX;
   }
 
   stopDrag() {
     this.isDragging = false;
-    document.body.style.cursor = 'grab';
-    this.autoRotateSpeed = 0.3;
+    container.classList.remove('dragging');
   }
 
-  // 🔥 3D ROBLOX AVATAR .glb LOADER
-async loadAvatar3D() {
-  try {
-    const res = await this.fetchWithRetry('/api/avatar3d');
-    const data = await res.json();
-    
-    if (data.glb) {
-      // Load GLB dengan Three.js atau model-viewer
-      this.loadGLBModel(data.glb);
-    } else {
-      // Fallback 2D
-      this.avatarImg = new Image();
-      this.avatarImg.crossOrigin = 'anonymous';
-      this.avatarImg.onload = () => this.animate2D();
-      this.avatarImg.src = data.fallback || 'https://via.placeholder.com/200?text=ROBLOX';
-      this.animate2D();
+  // 🔥 LOAD 2D ROBLOX AVATAR
+  async loadAvatar2D() {
+    try {
+      const res = await this.fetchWithRetry('/api/avatar');
+      const data = await res.json();
+      const avatar = document.getElementById('avatar2D');
+      avatar.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
+      avatar.onerror = () => {
+        avatar.src = 'https://via.placeholder.com/200?text=ROBLOX';
+      };
+    } catch (err) {
+      console.error('Avatar load failed:', err);
     }
-  } catch (err) {
-    console.error('3D Avatar failed:', err);
-    // Fallback
-    this.avatarImg = new Image();
-    this.avatarImg.src = 'https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=' + 8941948601 + '&size=420x420&format=Png';
-    this.animate2D();
   }
-}
 
-// Tambahkan CDN Three.js di HTML untuk 3D
-// <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-// <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
-
-  // 🔥 WEBSOCKET - CHANGE DETECTION
+  // 🔥 WEBSOCKET - SMART UPDATE ONLY WHEN CHANGED
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
@@ -139,20 +134,26 @@ async loadAvatar3D() {
     }
   }
 
+  // 🔥 SMART UPDATE - ONLY WHEN DATA CHANGED
   updateLiveData(data) {
     if (data.stats) {
-      this.animate(document.getElementById("friends"), data.stats.friends);
-      this.animate(document.getElementById("followers"), data.stats.followers);
-      this.animate(document.getElementById("following"), data.following);
+      const statsHash = JSON.stringify(data.stats);
+      if (statsHash !== this.lastStatsHash) {
+        this.animate(document.getElementById("friends"), data.stats.friends);
+        this.animate(document.getElementById("followers"), data.stats.followers);
+        this.animate(document.getElementById("following"), data.stats.following);
+        this.lastStatsHash = statsHash;
+      }
     }
     
-    // ✅ SMART ITEMS - Only update if changed
-    if (data.items && data.itemsHash !== this.currentItemsHash) {
-      this.currentItemsHash = data.itemsHash;
-      this.renderItems(data.items);
-      document.getElementById("totalValue").textContent = 
-        `${data.totalValue?.toLocaleString() || 0} R$`;
-      this.lastItemsUpdate = Date.now();
+    if (data.items) {
+      const itemsHash = JSON.stringify(data.items.map(i => i.id || i.name));
+      if (itemsHash !== this.lastItemsHash) {
+        this.renderItems(data.items);
+        document.getElementById("totalValue").textContent = 
+          `${data.totalValue?.toLocaleString() || 0} R$`;
+        this.lastItemsHash = itemsHash;
+      }
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
@@ -185,12 +186,12 @@ async loadAvatar3D() {
     }
   }
 
-  // ✅ SMART ITEMS - Only refresh when changed
-  async loadItemsSmart() {
+  // 🔥 SMART ITEMS LOAD - ONLY REFRESH WHEN CHANGED
+  async loadItems() {
     const container = document.getElementById("itemsContainer");
     
     // Show loading only first time
-    if (!this.currentItemsHash) {
+    if (!container.children.length) {
       container.innerHTML = Array(8).fill().map(() => 
         '<div class="loading-smooth"></div>'
       ).join('');
@@ -200,38 +201,16 @@ async loadAvatar3D() {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
       
-      // Only update if items actually changed
-      if (data.itemsHash !== this.currentItemsHash) {
-        this.currentItemsHash = data.itemsHash;
+      // Only update if items changed
+      const itemsHash = JSON.stringify(data.items.map(i => i.id || i.name));
+      if (itemsHash !== this.lastItemsHash) {
         this.renderItems(data.items || []);
         document.getElementById("totalValue").textContent = 
           `${(data.totalValue || 0).toLocaleString()} R$`;
-        this.lastItemsUpdate = Date.now();
+        this.lastItemsHash = itemsHash;
       }
     } catch (err) {
       console.error('Items failed:', err);
-      if (!this.currentItemsHash) {
-        container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Loading...</div>';
-      }
-    }
-    
-    // Smart check interval - only when needed
-    if (this.itemsCheckInterval) clearInterval(this.itemsCheckInterval);
-    this.itemsCheckInterval = setInterval(() => this.checkItemsUpdate(), 45000); // 45s smart check
-  }
-
-  async checkItemsUpdate() {
-    try {
-      const res = await this.fetchWithRetry('/api/items?checkOnly=true');
-      const data = await res.json();
-      
-      if (data.itemsHash !== this.currentItemsHash) {
-        console.log('🔄 ITEMS CHANGED - Updating...');
-        this.currentItemsHash = data.itemsHash;
-        await this.loadItemsSmart();
-      }
-    } catch (err) {
-      console.error('Items check failed:', err);
     }
   }
 
@@ -258,7 +237,7 @@ async loadAvatar3D() {
       <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null" loading="lazy">
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
         <div class="item-name">${item.name}</div>
         <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
@@ -296,12 +275,21 @@ async loadAvatar3D() {
         }, 2000);
       });
     };
+
+    // 🔥 SMART REFRESH - ONLY WHEN NEEDED (every 60s instead of 30s)
+    setInterval(() => {
+      this.loadItems();
+      this.loadStats();
+    }, 60000);
   }
 }
 
 // Global app instance
 let app;
+let container; // Fix for drag functions
+
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
-  document.getElementById('avatar2D').style.cursor = 'grab';
+  container = document.getElementById('avatar2DContainer');
+  container.style.cursor = 'grab';
 });
