@@ -1,251 +1,232 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.avatarCtx = null;
     this.avatarImg = null;
-    this.retryCount = 0;
-    this.lastStats = { friends: 0, followers: 0, following: 0 };
-    this.lastItems = [];
+    this.lastStats = { friends: -1, followers: -1, following: -1 };
+    this.lastItems = null;
     this.init();
   }
 
-  init() {
-    this.setupAvatar();
+  async init() {
+    this.updateStatus('🟡 Initializing...', '⚪');
+    await this.setupAvatar();
     this.connectWebSocket();
-    this.loadInitialData();
+    await this.loadAllData();
     this.addInteractions();
   }
 
-  setupAvatar() {
+  async setupAvatar() {
     const canvas = document.getElementById('avatar3D');
-    this.avatarCtx = canvas.getContext('2d');
-    this.loadRealRobloxAvatar();
-    this.animateAvatar();
+    const ctx = canvas.getContext('2d');
+    
+    // Default Roblox avatar langsung
+    this.avatarImg = new Image();
+    this.avatarImg.crossOrigin = 'anonymous';
+    this.avatarImg.onload = () => {
+      document.getElementById('avatarStatus').textContent = '✅ Avatar loaded';
+      this.animateAvatar(ctx);
+    };
+    this.avatarImg.onerror = () => {
+      document.getElementById('avatarStatus').textContent = '🔄 Retrying...';
+      this.loadRealAvatarFallback();
+    };
+    
+    this.avatarImg.src = `https://tr.rbxcdn.com/HEADSHOT-THUMBNAIL?userId=8941948601&width=420&height=420&format=png`;
   }
 
-  async loadRealRobloxAvatar() {
+  async loadRealAvatarFallback() {
     try {
-      const res = await this.fetchWithRetry('/api/avatar');
+      const res = await fetch('/api/avatar', { cache: 'no-cache' });
       const data = await res.json();
-      this.avatarImg = new Image();
-      this.avatarImg.crossOrigin = 'anonymous';
-      this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=8941948601&width=420&height=420&format=png';
-    } catch (err) {
-      console.error('Avatar load failed:', err);
-      this.avatarImg = new Image();
-      this.avatarImg.src = 'https://www.roblox.com/headshot-thumbnail/image?userId=8941948601&width=420&height=420&format=png';
+      this.avatarImg.src = data.image;
+    } catch (e) {
+      console.log('Using default avatar');
     }
   }
 
-  animateAvatar() {
-    const canvas = document.getElementById('avatar3D');
+  animateAvatar(ctx) {
     let rotation = 0;
+    const canvas = document.getElementById('avatar3D');
 
     function render() {
-      const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(rotation * 0.01);
+      ctx.rotate((rotation * 0.008));
       
-      // Real Roblox 3D lighting effect
-      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
-      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
+      // 3D lighting
+      const gradient = ctx.createRadialGradient(0, -25, 0, 0, 0, 120);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.5)');
+      gradient.addColorStop(0.6, 'rgba(0,255,255,0.2)');
       gradient.addColorStop(1, 'transparent');
       
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 5;
-      ctx.shadowOffsetY = 5;
+      ctx.shadowColor = 'rgba(0,255,255,0.3)';
+      ctx.shadowBlur = 25;
+      ctx.shadowOffsetX = 3;
+      ctx.shadowOffsetY = 3;
       
-      if (app.avatarImg && app.avatarImg.complete) {
-        ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
+      if (app.avatarImg.complete) {
+        ctx.drawImage(app.avatarImg, -90, -90, 180, 180);
       }
       
       ctx.restore();
-      rotation += 0.5;
+      rotation += 1;
       requestAnimationFrame(render);
     }
     render();
   }
 
   connectWebSocket() {
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
+    const wsUrl = `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected');
-      document.getElementById('liveIndicator').textContent = '🟢';
-      this.retryCount = 0;
+      console.log('✅ WebSocket OK');
+      this.updateStatus('🟢 Live', '🟢');
     };
 
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        this.updateOnlyIfChanged(data);
-      } catch (err) {
-        console.error('WS parse error:', err);
+        this.handleUpdate(data);
+      } catch (e) {
+        console.error('WS error:', e);
       }
     };
 
     this.ws.onclose = () => {
-      console.log('❌ WebSocket disconnected');
-      document.getElementById('liveIndicator').textContent = '🔴';
-      this.smartReconnect();
+      console.log('🔄 WS reconnecting...');
+      this.updateStatus('🔄 Reconnecting...', '🔴');
+      setTimeout(() => this.connectWebSocket(), 2000);
     };
   }
 
-  smartReconnect() {
-    if (this.retryCount < 5) {
-      setTimeout(() => {
-        this.retryCount++;
-        this.connectWebSocket();
-      }, 3000);
-    }
-  }
-
-  // ✅ UPDATE ONLY IF CHANGED - NO SPAM
-  updateOnlyIfChanged(data) {
-    if (data.stats) {
-      const statsChanged = 
-        data.stats.friends !== this.lastStats.friends ||
-        data.stats.followers !== this.lastStats.followers ||
-        data.stats.following !== this.lastStats.following;
-      
-      if (statsChanged) {
-        this.animate(document.getElementById("friends"), data.stats.friends);
-        this.animate(document.getElementById("followers"), data.stats.followers);
-        this.animate(document.getElementById("following"), data.stats.following);
-        this.lastStats = { ...data.stats };
-      }
-    }
+  async loadAllData() {
+    this.updateStatus('📊 Loading data...', '⚪');
     
-    if (data.items && JSON.stringify(data.items) !== JSON.stringify(this.lastItems)) {
-      this.renderItems(data.items);
-      this.lastItems = [...data.items];
-    }
-    
-    document.getElementById('liveIndicator').textContent = '🟢';
-  }
-
-  async fetchWithRetry(url, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const res = await fetch(url, { 
-          signal: AbortSignal.timeout(10000),
-          cache: 'no-store'
-        });
-        if (res.ok) return res;
-      } catch (err) {
-        if (i === retries - 1) throw err;
-        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-      }
-    }
-  }
-
-  async loadInitialData() {
-    await Promise.all([
+    await Promise.allSettled([
       this.loadStats(),
       this.loadItems()
     ]);
+    
+    this.updateStatus('✅ All loaded', '🟢');
   }
 
   async loadStats() {
     try {
-      const res = await this.fetchWithRetry('/api');
+      const res = await fetch('/api', { cache: 'no-cache' });
       const data = await res.json();
-      this.animate(document.getElementById("friends"), data.friends || 0);
-      this.animate(document.getElementById("followers"), data.followers || 0);
-      this.animate(document.getElementById("following"), data.following || 0);
-      this.lastStats = { ...data };
-    } catch (err) {
-      console.error('Stats failed:', err);
+      
+      document.getElementById('friends').textContent = data.friends?.toLocaleString() || '0';
+      document.getElementById('followers').textContent = data.followers?.toLocaleString() || '0';
+      document.getElementById('following').textContent = data.following?.toLocaleString() || '0';
+      
+      document.getElementById('friendsLabel').textContent = 'Koneksi';
+      document.getElementById('followersLabel').textContent = 'Pengikut';
+      document.getElementById('followingLabel').textContent = 'Mengikuti';
+      
+      this.lastStats = data;
+    } catch (e) {
+      console.error('Stats error:', e);
+      this.setStatsError();
     }
   }
 
   async loadItems() {
-    const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(8).fill().map(() => 
-      '<div class="loading-smooth"></div>'
-    ).join('');
-
     try {
-      const res = await this.fetchWithRetry('/api/items');
+      const res = await fetch('/api/items', { cache: 'no-cache' });
       const data = await res.json();
       this.renderItems(data.items || []);
-      this.lastItems = [...data.items];
-    } catch (err) {
-      console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
+    } catch (e) {
+      console.error('Items error:', e);
+      document.getElementById('itemsContainer').innerHTML = 
+        '<div class="error-msg">Failed to load items</div>';
+    }
+  }
+
+  handleUpdate(data) {
+    if (data.stats && (
+      data.stats.friends !== this.lastStats.friends ||
+      data.stats.followers !== this.lastStats.followers ||
+      data.stats.following !== this.lastStats.following
+    )) {
+      this.animateNumber('friends', data.stats.friends || 0);
+      this.animateNumber('followers', data.stats.followers || 0);
+      this.animateNumber('following', data.stats.following || 0);
+      this.lastStats = data.stats;
+    }
+    
+    if (data.items && JSON.stringify(data.items) !== JSON.stringify(this.lastItems)) {
+      this.renderItems(data.items);
+      this.lastItems = data.items;
     }
   }
 
   renderItems(items) {
-    const container = document.getElementById("itemsContainer");
-    if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+    const container = document.getElementById('itemsContainer');
+    if (!items || items.length === 0) {
+      container.innerHTML = '<div class="no-items">No items equipped</div>';
       return;
     }
 
-    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
+    container.innerHTML = items.map((item, i) => `
+      <div class="item-card ${this.getRarity(item)}" onclick="window.open('${item.link}', '_blank')">
+        ${i === 0 ? '<div class="equipped">ON</div>' : ''}
+        ${item.limited ? '<div class="limited">★</div>' : ''}
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/222/aaa?text=?'" loading="lazy">
+        <div class="item-name">${item.name}</div>
+      </div>
+    `).join('');
   }
 
   getRarity(item) {
-    if (item.limited || item.IsLimited || item.IsLimitedUnique) return "legendary";
-    if (item.name.toLowerCase().includes('epic') || item.name.toLowerCase().includes('legendary')) return "epic";
-    if (item.name.toLowerCase().includes('rare') || item.name.toLowerCase().includes('uncommon')) return "rare";
-    return "";
+    if (item.limited) return 'legendary';
+    return '';
   }
 
-  createItemCard(item, index) {
-    const rarity = this.getRarity(item);
-    return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
-        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
-        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/333/fff?text=?';this.onerror=null" loading="lazy">
-        <div class="item-name">${item.name}</div>
-      </div>
-    `;
-  }
-
-  animate(el, end) {
-    end = Number(end) || 0;
-    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 1000;
-    let startTime = null;
-
-    const step = (timestamp) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const value = Math.floor(start + (end - start) * easeProgress);
+  animateNumber(id, target) {
+    const el = document.getElementById(id);
+    const start = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    let progress = 0;
+    
+    const animate = () => {
+      progress += 0.1;
+      const value = Math.floor(start + (target - start) * progress);
       el.textContent = value.toLocaleString();
       
-      if (progress < 1) requestAnimationFrame(step);
+      if (progress < 1) requestAnimationFrame(animate);
     };
-    requestAnimationFrame(step);
+    animate();
+  }
+
+  setStatsError() {
+    document.getElementById('friends').textContent = '0';
+    document.getElementById('followers').textContent = '0';
+    document.getElementById('following').textContent = '0';
+  }
+
+  updateStatus(text, indicator) {
+    document.getElementById('avatarStatus').textContent = text;
+    document.getElementById('liveIndicator').textContent = indicator;
   }
 
   addInteractions() {
-    // Copy button
     document.getElementById('copyBtn').onclick = () => {
       navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
         const btn = document.getElementById('copyBtn');
-        btn.classList.add('copied');
+        const original = btn.innerHTML;
         btn.innerHTML = '✅ Copied!';
+        btn.classList.add('copied');
         setTimeout(() => {
+          btn.innerHTML = original;
           btn.classList.remove('copied');
-          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-        }, 2000);
+        }, 1500);
       });
     };
   }
 }
 
-// Global app instance
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
