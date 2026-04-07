@@ -36,7 +36,7 @@ let cachedData = {
   statsHash: ''
 };
 
-// Cache duration 60 seconds (less spam)
+// Cache duration 60 seconds
 const CACHE_DURATION = 60000;
 
 // Connected clients count
@@ -69,16 +69,22 @@ app.get("/api", async (req, res) => {
       return res.json(cachedData.stats);
     }
 
+    console.log('🔄 Fetching fresh stats...');
+    
     const [friendsRes, followersRes, followingRes] = await Promise.all([
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]);
+    ]).catch(() => [null, null, null]);
+
+    if (!friendsRes || !followersRes || !followingRes) {
+      return res.json(cachedData.stats);
+    }
 
     const [friends, followers, following] = await Promise.all([
-      friendsRes.json(),
-      followersRes.json(),
-      followingRes.json()
+      friendsRes.json().catch(() => ({count: 0})),
+      followersRes.json().catch(() => ({count: 0})),
+      followingRes.json().catch(() => ({count: 0}))
     ]);
 
     const newStats = {
@@ -95,9 +101,11 @@ app.get("/api", async (req, res) => {
       cachedData.statsHash = newStatsHash;
       cachedData.lastUpdate = now;
       
-      // Broadcast ONLY if changed
-      broadcast({ stats: newStats });
-      console.log('📊 STATS CHANGED - Broadcasted to', clientCount, 'clients');
+      // Broadcast ONLY if changed AND clients exist
+      if (clientCount > 0) {
+        broadcast({ stats: newStats });
+        console.log('📊 STATS CHANGED - Broadcasted to', clientCount, 'clients');
+      }
     }
 
     res.json(cachedData.stats);
@@ -109,7 +117,7 @@ app.get("/api", async (req, res) => {
 });
 
 // ==========================
-// 🔥 3D AVATAR API (CACHED)
+// 🔥 3D AVATAR API
 // ==========================
 app.get("/api/avatar", async (req, res) => {
   try {
@@ -143,13 +151,20 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
+    console.log('🔄 Fetching fresh items...');
+    
     // Get currently wearing
     const wearRes = await fetchWithRetry(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    );
+    ).catch(() => null);
+    
+    if (!wearRes) {
+      return res.json({ items: cachedData.items, totalValue: cachedData.totalValue });
+    }
+    
     const wear = await wearRes.json();
-
     let ids = wear.assetIds || [];
+    
     if (ids.length === 0) {
       const emptyData = { items: [], totalValue: 0 };
       cachedData.items = [];
@@ -191,7 +206,7 @@ app.get("/api/items", async (req, res) => {
         result.push(item);
         newItemDetails.push(item.name + item.price);
       } catch (itemErr) {
-        console.log(`Item ${id} error:`, itemErr);
+        console.log(`Item ${id} skipped:`, itemErr.message);
       }
     }
 
@@ -204,12 +219,14 @@ app.get("/api/items", async (req, res) => {
       cachedData.itemsHash = newItemsHash;
       cachedData.lastUpdate = now;
 
-      // Broadcast ONLY if changed
-      broadcast({
-        items: result,
-        totalValue: totalValue
-      });
-      console.log('🎒 ITEMS CHANGED - Broadcasted to', clientCount, 'clients');
+      // Broadcast ONLY if changed AND clients exist
+      if (clientCount > 0) {
+        broadcast({
+          items: result,
+          totalValue: totalValue
+        });
+        console.log('🎒 ITEMS CHANGED - Broadcasted to', clientCount, 'clients');
+      }
     }
 
     res.json({
@@ -246,7 +263,9 @@ function broadcast(data) {
     }
   });
   
-  console.log(`📡 Broadcasted to ${sentCount}/${clientCount} clients`);
+  if (sentCount > 0) {
+    console.log(`📡 Broadcasted to ${sentCount}/${clientCount} clients`);
+  }
 }
 
 // ==========================
@@ -260,18 +279,18 @@ wss.on('connection', (ws) => {
   ws.send(JSON.stringify(cachedData));
 
   ws.on('close', () => {
-    clientCount--;
+    clientCount = Math.max(0, clientCount - 1);
     console.log(`👋 Client disconnected. Active: ${clientCount}`);
   });
 
   ws.on('error', (err) => {
     console.error('WS error:', err);
-    clientCount--;
+    clientCount = Math.max(0, clientCount - 1);
   });
 });
 
 // ==========================
-// 🔥 SMART AUTO-UPDATE (60s interval, only if changed)
+// 🔥 FIXED AUTO-UPDATE - NO LOCALHOST FETCH
 // ==========================
 setInterval(async () => {
   if (clientCount === 0) {
@@ -279,19 +298,19 @@ setInterval(async () => {
     return;
   }
   
-  console.log('🔄 Checking for updates...');
+  console.log('🔄 Scheduled data refresh...');
   
   try {
-    // Check stats
-    await fetch(`http://localhost:${PORT}/api?_check=${Date.now()}`);
+    // Direct Roblox API calls instead of localhost fetch
+    await Promise.allSettled([
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`)
+    ]);
     
-    // Check items (more expensive)
-    await fetch(`http://localhost:${PORT}/api/items?_check=${Date.now()}`);
-    
-    console.log('✅ Update check complete');
+    console.log('✅ Scheduled refresh complete');
     
   } catch (err) {
-    console.error('Auto update check failed:', err);
+    console.error('Scheduled refresh failed (non-critical):', err.message);
   }
 }, 60000); // 60 seconds
 
@@ -310,7 +329,8 @@ app.get('/health', (req, res) => {
     status: 'OK', 
     timestamp: Date.now(),
     clients: clientCount,
-    cacheAge: Date.now() - cachedData.lastUpdate
+    cacheAge: Date.now() - cachedData.lastUpdate,
+    uptime: process.uptime()
   });
 });
 
@@ -320,7 +340,8 @@ app.get('/health', (req, res) => {
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
   console.log(`📡 WebSocket ready - 0 clients connected`);
-  console.log(`✅ Railway optimized - Anti-spam enabled`);
+  console.log(`✅ Railway FIXED - No localhost calls`);
+  console.log(`👤 User ID: ${USER_ID}`);
 });
 
 // Graceful shutdown
@@ -330,4 +351,9 @@ process.on('SIGTERM', () => {
     console.log('✅ Server closed');
     process.exit(0);
   });
+});
+
+process.on('SIGINT', () => {
+  console.log('🛑 SIGINT received - shutting down...');
+  process.exit(0);
 });
