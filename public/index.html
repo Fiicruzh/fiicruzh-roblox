@@ -3,58 +3,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>FiiCruzh</title>
-
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-
-<style>
-.center-text {
-  text-align: center;
-  margin-top: 10px;
-}
-
-/* BUTTON USERNAME */
-.copy-btn {
-  margin-top: 10px;
-  padding: 12px 18px;
-  background: rgba(0, 255, 255, 0.1);
-  border: 1px solid #0ff;
-  color: #0ff;
-  cursor: pointer;
-  border-radius: 10px;
-  font-family: 'Orbitron', sans-serif;
-  transition: all 0.3s ease;
-  display: inline-block;
-}
-
-/* HOVER */
-.copy-btn:hover {
-  background: #0ff;
-  color: #000;
-  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
-}
-
-/* CLICK */
-.copy-btn:active {
-  transform: scale(0.95);
-}
-
-/* SUCCESS */
-.copy-btn.copied {
-  background: #00ff88;
-  border-color: #00ff88;
-  color: #000;
-  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
-}
-</style>
-
 </head>
 
 <body>
-
 <div class="bg"></div>
 <div class="scanline"></div>
 
@@ -69,16 +24,20 @@
   </div>
 </div>
 
-<!-- AVATAR -->
-<div class="avatar-box">
-  <img id="avatar" src="https://i.ibb.co.com/hFPZKf8P/1775477390710-Picsart-Background-Remover.png">
+<!-- USERNAME INPUT -->
+<div class="username-input">
+  <input type="text" id="usernameInput" placeholder="Masukkan Roblox Username" />
+  <button id="searchBtn" class="copy-btn">
+    <i class="fas fa-search"></i> Search
+  </button>
 </div>
 
-<!-- BUTTON USERNAME (UPDATED) -->
-<div class="center-text">
-  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
-    <i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4
-  </button>
+<!-- AVATAR 3D -->
+<div class="avatar-3d-container">
+  <canvas id="avatarCanvas"></canvas>
+  <div id="avatarFallback" class="avatar-box">
+    <img id="avatar" src="https://i.ibb.co.com/hFPZKf8P/1775477390710-Picsart-Background-Remover.png">
+  </div>
 </div>
 
 <!-- STATS -->
@@ -86,13 +45,17 @@
   <div class="stat"><h2 id="friends">0</h2><span>Koneksi</span></div>
   <div class="stat"><h2 id="followers">0</h2><span>Pengikut</span></div>
   <div class="stat"><h2 id="following">0</h2><span>Mengikuti</span></div>
+  <div class="stat"><h2 id="totalValue">$0</h2><span>Total Value</span></div>
 </div>
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
-  <h3 class="items-title">MY ROBLOX ITEMS</h3>
+  <h3 class="items-title">
+    MY ROBLOX ITEMS 
+    <span id="totalItems">0</span>
+  </h3>
   <div class="items-container" id="itemsContainer"></div>
 </div>
   
@@ -105,18 +68,12 @@
 
 <!-- BUTTON ROW -->
 <div class="button-row">
-
-  <a href="https://www.roblox.com/share?code=b1423bfc72d6994f928923bf723f5706&type=Profile&source=ProfileShare&stamp=1775337024296"
-     class="btn main-btn">
+  <a href="https://www.roblox.com/share?code=b1423bfc72d6994f928923bf723f5706&type=Profile&source=ProfileShare&stamp=1775337024296" class="btn main-btn">
     <i class="fas fa-user"></i> Add Roblox
   </a>
-
-  <a href="https://i.ibb.co.com/KHK9T37/1775338572457.png"
-     target="_blank"
-     class="btn qr-btn">
+  <a href="https://i.ibb.co.com/KHK9T37/1775338572457.png" target="_blank" class="btn qr-btn">
     <i class="fas fa-qrcode"></i>
   </a>
-
 </div>
 
 <!-- DISCORD -->
@@ -130,6 +87,8 @@
 </div>
 </div>
 
+<!-- THREE.JS CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
