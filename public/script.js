@@ -94,7 +94,7 @@ async loadAvatar3D() {
     console.error('3D Avatar failed:', err);
     // Fallback
     this.avatarImg = new Image();
-    this.avatarImg.src = 'https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=' + USER_ID + '&size=420x420&format=Png';
+    this.avatarImg.src = 'https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=' + 8941948601 + '&size=420x420&format=Png';
     this.animate2D();
   }
 }
