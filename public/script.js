@@ -1,21 +1,31 @@
 const API = "/api";
+const avatar = document.getElementById("avatar");
 
+// ======================
+// 🔥 AVATAR LOAD
+// ======================
 async function loadAvatar(){
   try{
     const res = await fetch("/api/avatar");
     const data = await res.json();
 
     if(data.image){
-      document.getElementById("avatar").src = data.image;
+      avatar.src = data.image;
+    }else{
+      avatar.src = "https://via.placeholder.com/300";
     }
+
   }catch{
-    console.log("avatar error");
+    console.log("avatar fallback");
+    avatar.src = "https://via.placeholder.com/300";
   }
 }
 
-// 🔥 ANIMASI ANGKA (ANTI NaN)
+// ======================
+// 🔥 ANIMATE NUMBER
+// ======================
 function animate(el, end){
-  end = Number(end) || 0; // FIX NaN
+  end = Number(end) || 0;
 
   let start = 0;
   let duration = 1200;
@@ -38,78 +48,30 @@ function animate(el, end){
   requestAnimationFrame(step);
 }
 
-// 🔥 LOAD DATA ROBLOX (ANTI ERROR)
+// ======================
+// 🔥 STATS (ADA FALLBACK)
+// ======================
 async function loadStats(){
   try{
-    const res = await fetch("/api");
+    const res = await fetch(API);
     const data = await res.json();
 
-    animate(document.getElementById("friends"), data.friends);
-    animate(document.getElementById("followers"), data.followers);
-    animate(document.getElementById("following"), data.following);
+    animate(document.getElementById("friends"), data.friends || 120);
+    animate(document.getElementById("followers"), data.followers || 999);
+    animate(document.getElementById("following"), data.following || 300);
 
-  }catch(err){
-    console.log("fallback stats gagal", err);
+  }catch{
+    console.log("fallback stats");
+
+    animate(document.getElementById("friends"), 120);
+    animate(document.getElementById("followers"), 999);
+    animate(document.getElementById("following"), 300);
   }
 }
 
-// 🔥 LOAD AWAL + AUTO REFRESH
-loadStats();
-setInterval(loadStats, 5000);
-
-// 🔥 EFEK KLIK BUTTON
-document.querySelectorAll(".buttons a").forEach(btn=>{
-  btn.addEventListener("click", ()=>{
-    btn.style.transform = "scale(0.9)";
-    setTimeout(()=>{
-      btn.style.transform = "scale(1.05)";
-    },150);
-  });
-});
-
-// 🔥 HOVER ICON LEBIH HIDUP
-document.querySelectorAll(".icons a").forEach(icon=>{
-  icon.addEventListener("mouseenter", ()=>{
-    icon.style.transform = "scale(1.3) rotate(8deg)";
-  });
-
-  icon.addEventListener("mouseleave", ()=>{
-    icon.style.transform = "scale(1)";
-  });
-});
-
-// 🔥 AVATAR INTERAKTIF (FOLLOW MOUSE)
-
-if(avatar){
-  document.addEventListener("mousemove", (e)=>{
-    let x = (window.innerWidth / 2 - e.clientX) / 25;
-    let y = (window.innerHeight / 2 - e.clientY) / 25;
-
-    avatar.style.transform = `rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
-  });
-
-  document.addEventListener("mouseleave", ()=>{
-    avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
-  });
-}
-
-// ============================
-// 🔥 ROBLOX ITEMS FINAL SYSTEM
-// ============================
-
-window.addEventListener("DOMContentLoaded", ()=>{
-  loadAvatar();
-  loadStats();
-  loadItems();
-});
-
-function getRarity(price){
-  if(price > 10000) return "legendary";
-  if(price > 5000) return "epic";
-  if(price > 1000) return "rare";
-  return "normal";
-}
-
+// ======================
+// 🔥 ITEM RARITY
+// ======================
 function getRarity(price){
   if(price > 10000) return "legendary";
   if(price > 5000) return "epic";
@@ -117,6 +79,9 @@ function getRarity(price){
   return "";
 }
 
+// ======================
+// 🔥 CREATE CARD
+// ======================
 function createCard(item, index){
   const rarity = getRarity(item.price);
 
@@ -136,6 +101,9 @@ function createCard(item, index){
   return div;
 }
 
+// ======================
+// 🔥 RENDER ITEMS
+// ======================
 function renderItems(items){
   const container = document.getElementById("itemsContainer");
   container.innerHTML = "";
@@ -145,30 +113,49 @@ function renderItems(items){
   });
 }
 
+// ======================
+// 🔥 LOAD ITEMS + FALLBACK
+// ======================
 async function loadItems(){
   const container = document.getElementById("itemsContainer");
-  if(!container) return;
-
-  container.innerHTML = "";
 
   try{
     const res = await fetch("/api/items");
     const items = await res.json();
 
-    console.log("ITEMS:", items);
+    if(!items || items.length === 0){
+      throw "EMPTY";
+    }
 
     renderItems(items);
 
-  }catch(err){
-    console.log("fallback item gagal", err);
-    container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
+  }catch{
+    console.log("fallback items");
+
+    const fallback = [
+      {
+        name:"Fallback Hat",
+        price:5000,
+        limited:true,
+        image:"https://via.placeholder.com/150",
+        link:"#"
+      },
+      {
+        name:"Fallback Sword",
+        price:12000,
+        limited:true,
+        image:"https://via.placeholder.com/150",
+        link:"#"
+      }
+    ];
+
+    renderItems(fallback);
   }
 }
 
 // ======================
-// 🔴 WEBSOCKET LIVE UPDATE
+// 🔥 WEBSOCKET LIVE UPDATE
 // ======================
-
 const ws = new WebSocket(
   location.protocol === "https:"
     ? "wss://" + location.host
@@ -190,25 +177,55 @@ ws.onmessage = (msg)=>{
     }
 
   }catch(e){
-    console.log("WS ERROR", e);
+    console.log("WS error", e);
   }
 };
 
-async function loadStats(){
-  try{
-    const res = await fetch("/api");
-    const data = await res.json();
+// ======================
+// 🔥 INTERACTION UI
+// ======================
+document.querySelectorAll(".buttons a").forEach(btn=>{
+  btn.addEventListener("click", ()=>{
+    btn.style.transform = "scale(0.9)";
+    setTimeout(()=>{
+      btn.style.transform = "scale(1.05)";
+    },150);
+  });
+});
 
-    animate(document.getElementById("friends"), data.friends);
-    animate(document.getElementById("followers"), data.followers);
-    animate(document.getElementById("following"), data.following);
-  }catch{
-    console.log("fallback stats gagal");
-  }
+document.querySelectorAll(".icons a").forEach(icon=>{
+  icon.addEventListener("mouseenter", ()=>{
+    icon.style.transform = "scale(1.3) rotate(8deg)";
+  });
+
+  icon.addEventListener("mouseleave", ()=>{
+    icon.style.transform = "scale(1)";
+  });
+});
+
+// ======================
+// 🔥 AVATAR 3D EFFECT
+// ======================
+if(avatar){
+  document.addEventListener("mousemove", (e)=>{
+    let x = (window.innerWidth / 2 - e.clientX) / 25;
+    let y = (window.innerHeight / 2 - e.clientY) / 25;
+
+    avatar.style.transform = `rotateY(${x}deg) rotateX(${y}deg) scale(1.05)`;
+  });
+
+  document.addEventListener("mouseleave", ()=>{
+    avatar.style.transform = "rotateY(0deg) rotateX(0deg)";
+  });
 }
 
+// ======================
+// 🔥 INIT
+// ======================
 window.addEventListener("DOMContentLoaded", ()=>{
   loadAvatar();
   loadStats();
   loadItems();
+
+  setInterval(loadStats, 5000);
 });
