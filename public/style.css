@@ -107,53 +107,29 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* 🔥 2D ROBLOX AVATAR - SMOOTH 360° SCROLL */
+/* AVATAR 3D ULTRA SMOOTH */
 .avatar-box{
   text-align:center;
   margin-top:12px;
   perspective: 1200px;
 }
 
-.avatar-2d-container {
-  width: 200px;
-  height: 200px;
-  margin: 0 auto;
-  position: relative;
+#avatar3D{
+  width:180px !important;
+  height:180px !important;
+  border-radius:12px;
+  box-shadow:0 0 30px cyan, inset 0 0 20px rgba(0,255,255,0.1);
   cursor: grab;
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 0 40px cyan;
   transition: box-shadow 0.3s ease;
+  transform-style: preserve-3d;
 }
 
-.avatar-2d-container:hover {
-  box-shadow: 0 0 60px cyan, 0 0 100px cyan;
-}
-
-.avatar-2d {
-  width: 200px;
-  height: 200px;
-  object-fit: cover;
-  border-radius: 20px;
-  transition: transform 0.1s ease-out;
-  will-change: transform;
-}
-
-.avatar-2d-container.dragging {
+#avatar3D:active{
   cursor: grabbing;
 }
 
-/* MOUSE WHEEL SCROLL EFFECT */
-.avatar-2d-container::-webkit-scrollbar {
-  display: none;
-}
-
-.drag-hint {
-  font-size: 10px;
-  color: #0ff;
-  margin-top: 8px;
-  opacity: 0.8;
-  font-family: 'Orbitron', sans-serif;
+#avatar3D:hover{
+  box-shadow:0 0 40px cyan, inset 0 0 30px rgba(0,255,255,0.2);
 }
 
 /* BUTTON USERNAME */
@@ -168,8 +144,6 @@ body{
   font-family: 'Orbitron', sans-serif;
   transition: all 0.3s ease;
   display: inline-block;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .copy-btn:hover {
@@ -351,7 +325,6 @@ body{
   transition:0.3s;
   position:relative;
   transform-style:preserve-3d;
-  flex-shrink: 0;
 }
 
 /* GLOW RARITY */
@@ -463,7 +436,6 @@ body{
   animation:loading-smooth 1.5s ease-in-out infinite;
   position:relative;
   overflow:hidden;
-  flex-shrink: 0;
 }
 
 .loading-smooth::after{
@@ -485,6 +457,15 @@ body{
 @keyframes shimmer{
   0%{left:-100%;}
   100%{left:100%;}
+}
+
+/* 3D AVATAR ENHANCED */
+.drag-hint {
+  font-size: 10px;
+  color: #0ff;
+  margin-top: 5px;
+  opacity: 0.7;
+  font-family: 'Orbitron', sans-serif;
 }
 
 #liveIndicator {
