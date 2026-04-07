@@ -1,4 +1,16 @@
 const API = "/api";
+const USERNAME = "dapaarowr4";
+let USER_ID = null;
+
+async function getUserId(){
+  try{
+    const res = await fetch(`/api/user/${USERNAME}`);
+    const data = await res.json();
+    USER_ID = data.id;
+  }catch{
+    console.log("Gagal ambil USER_ID");
+  }
+}
 
 // ======================
 // 🔥 AVATAR
@@ -111,10 +123,29 @@ function createCard(item, index){
 // ======================
 // 🔥 LOAD ITEMS (FINAL FIX)
 // ======================
+async function safeFetch(url, retry = 3){
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error();
+    return await res.json();
+  }catch{
+    if(retry > 0){
+      return await safeFetch(url, retry - 1);
+    }
+    return null;
+  }
+}
+
 async function loadItems(){
   const container = document.getElementById("itemsContainer");
   if(!container) return;
+  
+let totalPrice = 0;
 
+function updateTotal(){
+  document.getElementById("totalPrice").innerText =
+    "Total: " + totalPrice.toLocaleString() + " R$";
+}
   // skeleton loading
   container.innerHTML = "";
   for(let i=0;i<5;i++){
@@ -136,9 +167,14 @@ async function loadItems(){
       {name:"No Item", image:"https://via.placeholder.com/150", price:0, link:"#"}
     ];
 
-    finalItems.slice(0,20).forEach((item,i)=>{
-      container.appendChild(createCard(item,i));
-    });
+    totalPrice = 0;
+
+finalItems.slice(0,20).forEach((item,i)=>{
+  totalPrice += item.price || 0;
+  container.appendChild(createCard(item,i));
+});
+
+updateTotal();
 
   }catch(err){
     console.log("ITEM ERROR:", err);
@@ -149,10 +185,12 @@ async function loadItems(){
 // ======================
 // 🔥 INIT (SATU KALI AJA)
 // ======================
-window.addEventListener("DOMContentLoaded", ()=>{
-  loadAvatar();
-  loadStats();
+window.addEventListener("DOMContentLoaded", async ()=>{
+  await getUserId();
   loadItems();
+  loadAvatar();
+  init3DAvatar();
+});
 
   // 🔥 BUTTON EFFECT
   document.querySelectorAll(".buttons a").forEach(btn=>{
@@ -191,6 +229,54 @@ window.addEventListener("DOMContentLoaded", ()=>{
     });
   }
 });
+
+const socket = new WebSocket(location.origin.replace("http","ws"));
+
+socket.onmessage = (event)=>{
+  const data = JSON.parse(event.data);
+
+  if(data.type === "items"){
+    loadItems(); // reload dari server
+  }
+
+  if(data.type === "stats"){
+    animate(document.getElementById("friends"), data.friends);
+    animate(document.getElementById("followers"), data.followers);
+    animate(document.getElementById("following"), data.following);
+  }
+};
+
+function init3DAvatar(){
+  const container = document.querySelector(".avatar-box");
+
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 1000);
+  const renderer = new THREE.WebGLRenderer({alpha:true});
+  renderer.setSize(180,180);
+
+  container.innerHTML = "";
+  container.appendChild(renderer.domElement);
+
+  const geometry = new THREE.BoxGeometry();
+  const material = new THREE.MeshBasicMaterial({
+    color:0x00ffff,
+    wireframe:true
+  });
+
+  const cube = new THREE.Mesh(geometry, material);
+  scene.add(cube);
+
+  camera.position.z = 2;
+
+  function loop(){
+    requestAnimationFrame(loop);
+    cube.rotation.x += 0.01;
+    cube.rotation.y += 0.01;
+    renderer.render(scene, camera);
+  }
+
+  loop();
+}
 
 // 🔥 AUTO REFRESH
 setInterval(loadStats, 5000);
