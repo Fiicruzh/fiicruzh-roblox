@@ -107,24 +107,20 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* AVATAR 3D - ROBLOX STYLE */
+/* 🔥 AVATAR REAL 3D ROBLOX */
 .avatar-box{
   text-align:center;
   margin-top:12px;
-  perspective: 1200px;
+  perspective: 1000px;
 }
 
 #avatar3D{
-  width:180px;
-  height:180px;
+  width:180px !important;
+  height:180px !important;
   border-radius:12px;
   box-shadow:0 0 30px cyan;
-  cursor: grab;
-  transition: all 0.1s ease-out;
-}
-
-#avatar3D:active{
-  cursor: grabbing;
+  display:block;
+  margin:0 auto;
 }
 
 /* BUTTON USERNAME */
@@ -139,6 +135,7 @@ body{
   font-family: 'Orbitron', sans-serif;
   transition: all 0.3s ease;
   display: inline-block;
+  width:100%;
 }
 
 .copy-btn:hover {
@@ -255,7 +252,7 @@ body{
 }
 
 /* ===================== */
-/* ROBLOX ITEMS */
+/* 🔥 ROBLOX ITEMS */
 /* ===================== */
 
 .items-section{
@@ -267,6 +264,15 @@ body{
   color:cyan;
   font-size:13px;
   margin-bottom:8px;
+}
+
+#liveIndicator {
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
 }
 
 .items-container{
@@ -302,7 +308,7 @@ body{
   cursor:pointer;
   transition:0.3s;
   position:relative;
-  transform-style:preserve-3d;
+  flex-shrink:0;
 }
 
 /* GLOW RARITY */
@@ -361,6 +367,9 @@ body{
   font-size:10px;
   margin-top:4px;
   font-weight:500;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
 /* EQUIPPED */
@@ -406,6 +415,7 @@ body{
   animation:loading-smooth 1.5s ease-in-out infinite;
   position:relative;
   overflow:hidden;
+  flex-shrink:0;
 }
 
 .loading-smooth::after{
@@ -427,22 +437,4 @@ body{
 @keyframes shimmer{
   0%{left:-100%;}
   100%{left:100%;}
-}
-
-/* 3D AVATAR ENHANCED - ROBLOX INERTIA */
-.drag-hint {
-  font-size: 10px;
-  color: #0ff;
-  margin-top: 5px;
-  opacity: 0.7;
-  font-family: 'Orbitron', sans-serif;
-}
-
-#liveIndicator {
-  animation: pulse 2s infinite;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
 }
