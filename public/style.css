@@ -438,3 +438,27 @@ body{
   0%{left:-100%;}
   100%{left:100%;}
 }
+
+/* STATUS */
+.status, .error-msg, .no-items, .loading-full {
+  text-align: center;
+  font-size: 11px;
+  color: #0ff;
+  margin-top: 5px;
+  font-family: 'Orbitron', sans-serif;
+}
+
+.error-msg {
+  color: #ff4444;
+}
+
+.no-items, .loading-full {
+  padding: 20px;
+  color: #666;
+}
+
+.stat span {
+  font-size: 10px;
+  display: block;
+  margin-top: 2px;
+}
