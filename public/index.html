@@ -24,14 +24,15 @@
   </div>
 </div>
 
-<!-- AVATAR 3D -->
+<!-- 3D 360° AVATAR -->
 <div class="avatar-box">
   <canvas id="avatar3D" width="200" height="200"></canvas>
+  <div class="drag-hint">🖱️ Drag to rotate</div>
 </div>
 
 <!-- BUTTON USERNAME -->
 <div class="center-text">
-  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
+  <button class="copy-btn" id="copyBtn">
     <i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4
   </button>
 </div>
@@ -52,7 +53,7 @@
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
-  <h3 class="items-title">MY ROBLOX ITEMS</h3>
+  <h3 class="items-title">MY ROBLOX ITEMS <span id="liveIndicator">🔴</span></h3>
   <div class="items-container" id="itemsContainer"></div>
 </div>
   
