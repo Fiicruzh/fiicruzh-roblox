@@ -11,7 +11,7 @@ class PortfolioApp {
   this.connectWebSocket();
   this.loadStats();
   this.loadAvatar();
-  this.loadItems();  // 🔥 TAMBAHKAN INI
+  this.loadItems();  // 🔥 CRITICAL: Load items on start
   this.addInteractions();
 }
 
