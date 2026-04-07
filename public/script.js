@@ -1,11 +1,18 @@
-const API = "/api";
+// 🔥 LOAD AVATAR
+async function loadAvatar(){
+  try{
+    const res = await fetch("/api/avatar");
+    const data = await res.json();
 
-function getRarity(item){
-  if(item.limited) return "legendary";
-  if(item.price > 10000) return "epic";
-  if(item.price > 1000) return "rare";
-  return "common";
+    if(data.avatar){
+      document.getElementById("avatar").src = data.avatar;
+    }
+  }catch(err){
+    console.log("Avatar error:", err);
+  }
 }
+
+const API = "/api";
 
 // 🔥 ANIMASI ANGKA (ANTI NaN)
 function animate(el, end){
@@ -106,21 +113,18 @@ window.addEventListener("DOMContentLoaded", ()=>{
   loadItems();
 });
 
-function createCard(item){
+function createCard(item, index){
   const div = document.createElement("div");
-
-  const rarity = getRarity(item);
-
-  div.className = `item-card ${rarity}`;
+  div.className = "item-card " + item.rarity;
 
   div.innerHTML = `
-    <img src="${item.image || 'https://via.placeholder.com/150'}">
+    ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
+    <img src="${item.image}">
     <div class="item-name">${item.name}</div>
-    ${item.price ? `<div style="font-size:9px;color:lime">${item.price} R$</div>` : ""}
-    ${item.limited ? `<div style="color:violet;font-size:9px">LIMITED</div>` : ""}
+    <div class="item-price">${item.price} R$</div>
   `;
 
-  div.onclick = ()=> window.open(item.link,"_blank");
+  div.onclick = ()=> window.open(item.link);
 
   return div;
 }
@@ -162,15 +166,8 @@ async function loadItems(){
   }
 }
 
-async function loadAvatar(){
-  try{
-    const res = await fetch("/api/avatar");
-    const data = await res.json();
-
-    document.getElementById("avatar").src = data.avatar;
-  }catch(e){
-    console.log("AVATAR ERROR");
-  }
-}
-
-loadAvatar();
+window.addEventListener("DOMContentLoaded", ()=>{
+  loadItems();
+  loadAvatar(); // 🔥 TAMBAH INI
+});
+console.log("ITEM COUNT:", finalItems.length);
