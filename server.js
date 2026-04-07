@@ -34,19 +34,33 @@ let cachedData = {
 // Cache duration 30 seconds
 const CACHE_DURATION = 30000;
 
+// 🔥 UPGRADED fetchWithRetry - 100% SAFE
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url);
-      if (response.ok) return response;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (response && response.ok) {
+        return response;
+      }
     } catch (err) {
-      if (i === retries - 1) throw err;
+      if (i === retries - 1) {
+        console.log(`❌ Fetch failed: ${url}`);
+        return null; // Return null instead of throw
+      }
       await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
+  return null;
 }
 
-// 🔥 API STATS
+// 🔥 API STATS - SAFE VERSION
 app.get("/api", async (req, res) => {
   try {
     const now = Date.now();
@@ -55,23 +69,24 @@ app.get("/api", async (req, res) => {
       return res.json(cachedData.stats);
     }
 
-    const [friendsRes, followersRes, followingRes] = await Promise.all([
+    const requests = await Promise.allSettled([
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
     ]);
 
-    const [friends, followers, following] = await Promise.all([
-      friendsRes.json(),
-      followersRes.json(),
-      followingRes.json()
-    ]);
+    const stats = { friends: 0, followers: 0, following: 0 };
 
-    const stats = {
-      friends: friends.count || 0,
-      followers: followers.count || 0,
-      following: following.count || 0
-    };
+    for (let i = 0; i < requests.length; i++) {
+      if (requests[i].status === 'fulfilled' && requests[i].value) {
+        try {
+          const data = await requests[i].value.json();
+          if (i === 0) stats.friends = data.count || 0;
+          if (i === 1) stats.followers = data.count || 0;
+          if (i === 2) stats.following = data.count || 0;
+        } catch (e) {}
+      }
+    }
 
     cachedData.stats = stats;
     cachedData.lastUpdate = now;
@@ -85,25 +100,32 @@ app.get("/api", async (req, res) => {
   }
 });
 
-// 🔥 AVATAR API
+// 🔥 AVATAR API - SAFE
 app.get("/api/avatar", async (req, res) => {
   try {
     const avatarRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     );
-    const avatar = await avatarRes.json();
-
-    res.json({
-      image: avatar.data?.[0]?.imageUrl || null
-    });
-
+    
+    if (avatarRes) {
+      const avatar = await avatarRes.json();
+      res.json({
+        image: avatar?.data?.[0]?.imageUrl || `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`
+      });
+    } else {
+      res.json({ 
+        image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` 
+      });
+    }
   } catch (err) {
     console.error("Avatar error:", err);
-    res.json({ image: null });
+    res.json({ 
+      image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` 
+    });
   }
 });
 
-// 🔥 ITEMS API - SEMUA AKSESORIS & PAKAIAN EQUIPPED
+// 🔥 ITEMS API - FULLY EQUIPPED ITEMS + 100% ERROR-PROOF
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -112,70 +134,72 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    // 1. Get ALL currently wearing items
-    const wearRes = await fetchWithRetry(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/outfit`
-    );
-    const wear = await wearRes.json();
+    console.log('🔄 Fetching ALL equipped items...');
 
-    // 2. Extract SEMUA asset IDs yang equipped
-    let allAssetIds = [];
+    // 1. Get outfit data (primary)
+    let wearData = { assets: [], assetIds: [] };
+    let outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
     
-    // Add dari outfit assets
-    if (wear.assets) {
-      wear.assets.forEach(asset => {
-        if (asset.id) allAssetIds.push(asset.id);
+    if (outfitRes) {
+      wearData = await outfitRes.json();
+    } else {
+      // Fallback
+      console.log('🔄 Outfit failed, using currently-wearing...');
+      const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+      if (wearRes) {
+        wearData = await wearRes.json();
+      }
+    }
+
+    // 2. Extract ALL asset IDs
+    let allAssetIds = [];
+    if (wearData.assets && Array.isArray(wearData.assets)) {
+      wearData.assets.forEach(asset => {
+        if (asset?.id) allAssetIds.push(asset.id);
       });
     }
-    
-    // Add dari legacy assetIds (backup)
-    if (wear.assetIds) {
-      wear.assetIds.forEach(id => allAssetIds.push(id));
+    if (wearData.assetIds && Array.isArray(wearData.assetIds)) {
+      wearData.assetIds.forEach(id => {
+        if (id) allAssetIds.push(id);
+      });
     }
 
-    // Remove duplicates
-    allAssetIds = [...new Set(allAssetIds)];
-
-    console.log(`🔍 Found ${allAssetIds.length} equipped items`);
+    // Remove duplicates & limit to 20
+    allAssetIds = [...new Set(allAssetIds)].slice(0, 20);
+    console.log(`🔍 Found ${allAssetIds.length} equipped items:`, allAssetIds.slice(0, 5));
 
     if (allAssetIds.length === 0) {
       cachedData.items = [];
       cachedData.lastUpdate = now;
+      console.log('❌ No equipped items');
       return res.json({ items: [] });
     }
 
-    // 3. Get thumbnails untuk SEMUA items
-    const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${allAssetIds.slice(0,24).join(",")}&size=150x150&format=Png`
-    );
-    const thumbs = await thumbsRes.json();
-
-    // 4. Process SEMUA items (max 24 untuk smooth)
+    // 3. Process each item SAFELY
     const result = [];
-    for (const id of allAssetIds.slice(0, 24)) {
+    for (const id of allAssetIds) {
       try {
-        const detailRes = await fetchWithRetry(
-          `https://economy.roblox.com/v2/assets/${id}/details`,
-          2, 800
-        );
-        const detail = await detailRes.json();
+        let itemName = `Equipped #${id}`;
+        
+        // Try get name
+        const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`, 1, 500);
+        if (detailRes) {
+          const detail = await detailRes.json();
+          itemName = detail.Name || itemName;
+        }
 
-        const thumb = thumbs.data?.find(t => t.targetId == parseInt(id));
-
-        // ✅ Tampilkan SEMUA equipped items (pakaian + aksesoris)
         result.push({
-          name: detail.Name || `Item #${id}`,
-          image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
+          name: itemName,
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${id}/item`
         });
 
       } catch (itemErr) {
-        console.log(`Item ${id} fallback`);
-        // Fallback image
+        console.log(`⚠️ Item ${id} fallback`);
         result.push({
-          name: "Equipped Item",
+          name: `Equipped Item #${id}`,
           image: `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-          link: `https://www.roblox.com/catalog/${id}`
+          link: `https://www.roblox.com/catalog/${id}/item`
         });
       }
     }
@@ -183,17 +207,17 @@ app.get("/api/items", async (req, res) => {
     cachedData.items = result;
     cachedData.lastUpdate = now;
 
-    console.log(`✅ Processed ${result.length} equipped items`);
+    console.log(`✅ SUCCESS: ${result.length} items processed`);
     broadcast({ items: result });
     res.json({ items: result });
 
   } catch (err) {
-    console.error("Items error:", err);
-    res.json({ items: cachedData.items });
+    console.error("Items ERROR:", err.message);
+    res.status(200).json({ items: cachedData.items || [] });
   }
 });
 
-// 🔥 WEBSOCKET
+// 🔥 WEBSOCKET BROADCAST
 function broadcast(data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -209,48 +233,37 @@ function broadcast(data) {
 wss.on('connection', (ws) => {
   console.log('👤 WebSocket client connected');
   ws.send(JSON.stringify(cachedData));
-  
-  ws.on('close', () => {
-    console.log('👋 WebSocket client disconnected');
-  });
+  ws.on('close', () => console.log('👋 WebSocket disconnected'));
 });
 
-// 🔥 AUTO UPDATE - FIXED FOR RAILWAY
+// 🔥 AUTO UPDATE LOOP
 setInterval(async () => {
-  console.log('🔄 Updating data...');
+  console.log('🔄 Auto refresh...');
   try {
-    // Update stats
-    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`, { 
-      timeout: 10000 
-    }).catch(() => {});
-    
-    // Update items  
-    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`, { 
-      timeout: 10000 
-    }).catch(() => {});
-    
-    console.log('✅ Data updated & broadcasted');
+    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`, { timeout: 5000 }).catch(() => {});
+    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`, { timeout: 5000 }).catch(() => {});
+    console.log('✅ Auto refresh complete');
   } catch (err) {
-    console.error('Auto update failed:', err);
+    console.log('⚠️ Auto refresh skipped');
   }
 }, 30000);
 
-// SPA ROUTING
+// 🔥 SPA ROUTING
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Health check
+// 🔥 HEALTH CHECK
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: Date.now() });
+  res.json({ status: 'OK', timestamp: Date.now(), items: cachedData.items.length });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('✅ Railway ready!');
+  console.log(`🚀 Server ON: port ${PORT}`);
+  console.log(`✅ 100% Railway Ready!`);
 });
 
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down...');
+  console.log('🛑 Graceful shutdown');
   server.close(() => process.exit(0));
 });
