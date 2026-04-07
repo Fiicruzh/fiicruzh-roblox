@@ -6,7 +6,7 @@ body{
   overflow-x:hidden;
 }
 
-/* BG */
+/* BG & SCANLINE (SAME) */
 .bg{
   position:fixed;
   width:100%;
@@ -16,7 +16,6 @@ body{
   z-index:-2;
 }
 
-/* SCANLINE */
 .scanline{
   position:fixed;
   width:100%;
@@ -34,7 +33,7 @@ body{
   to{background-position:0 100%;}
 }
 
-/* CONTAINER */
+/* CONTAINER & CARD (SAME) */
 .container{
   display:flex;
   justify-content:center;
@@ -43,7 +42,6 @@ body{
   padding:20px;
 }
 
-/* CARD */
 .card{
   width:100%;
   max-width:360px;
@@ -54,7 +52,7 @@ body{
   box-shadow:0 0 50px cyan;
 }
 
-/* GLITCH TEXT */
+/* GLITCH TEXT (SAME) */
 .glitch{
   position:relative;
   color:cyan;
@@ -93,7 +91,7 @@ body{
   100%{clip-path:inset(80% 0 0 0);}
 }
 
-/* HEADER */
+/* HEADER (SAME) */
 .header{
   display:flex;
   align-items:center;
@@ -107,10 +105,53 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* AVATAR */
+/* USERNAME INPUT BARU */
+.username-input{
+  margin:15px 0;
+  display:flex;
+  gap:8px;
+}
+
+#usernameInput{
+  flex:1;
+  padding:10px;
+  background:rgba(0,255,255,0.1);
+  border:1px solid #0ff;
+  border-radius:8px;
+  color:cyan;
+  font-family:'Orbitron',sans-serif;
+}
+
+#usernameInput::placeholder{
+  color:#0ff8;
+}
+
+/* 3D AVATAR CONTAINER */
+.avatar-3d-container{
+  position:relative;
+  height:200px;
+  margin:12px 0;
+  border-radius:12px;
+  overflow:hidden;
+  background:rgba(0,0,0,0.5);
+}
+
+#avatarCanvas{
+  width:100%;
+  height:100%;
+  display:block;
+  border-radius:12px;
+}
+
 .avatar-box{
-  text-align:center;
-  margin-top:12px;
+  position:absolute;
+  top:0;
+  left:0;
+  width:100%;
+  height:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
 }
 
 #avatar{
@@ -119,20 +160,18 @@ body{
   box-shadow:0 0 30px cyan;
 }
 
-/* ID */
-.roblox-id{
-  text-align:center;
-  margin-top:10px;
-  font-size:13px;
-  opacity:.8;
-}
-
-/* STATS */
+/* STATS (TAMBAH TOTAL VALUE) */
 .stats{
   display:grid;
-  grid-template-columns:repeat(3,1fr);
+  grid-template-columns:repeat(2,1fr);
   gap:8px;
   margin-top:12px;
+}
+
+@media(max-width:480px){
+  .stats{
+    grid-template-columns:repeat(2,1fr);
+  }
 }
 
 .stat{
@@ -149,7 +188,7 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* TAG */
+/* TAG & ICONS (SAME) */
 .tagline{
   text-align:center;
   margin-top:10px;
@@ -157,7 +196,6 @@ body{
   color:cyan;
 }
 
-/* ICON */
 .icons{
   display:flex;
   justify-content:center;
@@ -175,7 +213,7 @@ body{
   transform:scale(1.3);
 }
 
-/* BUTTON */
+/* BUTTONS (SAME) */
 .btn{
   display:flex;
   align-items:center;
@@ -195,46 +233,17 @@ body{
   color:black;
 }
 
-/* ROW */
 .button-row{
   display:flex;
   gap:8px;
   margin-top:14px;
 }
 
-/* FIX QR SELALU SAMPING */
-.main-btn{
-  flex:1;
-}
+.main-btn{flex:1;}
+.qr-btn{width:48px;min-width:48px;}
+.discord-btn{margin-top:10px;}
 
-.qr-btn{
-  width:48px;
-  min-width:48px;
-}
-
-/* DISCORD */
-.discord-btn{
-  margin-top:10px;
-}
-
-/* RESPONSIVE FIX */
-@media(max-width:480px){
-
-  .header{
-    flex-direction:column;
-    text-align:center;
-  }
-
-  .button-row{
-    flex-direction:row; /* tetap samping */
-  }
-
-}
-
-/* ===================== */
 /* ROBLOX ITEMS */
-/* ===================== */
-
 .items-section{
   margin-top:15px;
 }
@@ -246,14 +255,31 @@ body{
   margin-bottom:8px;
 }
 
+#totalItems{
+  color:gold;
+  font-weight:700;
+}
+
 .items-container{
   display:flex;
   gap:10px;
   overflow-x:auto;
   min-height:110px;
+  padding:5px 0;
+  scrollbar-width:thin;
+  scrollbar-color:cyan transparent;
 }
 
-/* CARD */
+.items-container::-webkit-scrollbar{
+  height:4px;
+}
+
+.items-container::-webkit-scrollbar-thumb{
+  background:cyan;
+  border-radius:2px;
+}
+
+/* ITEM CARD */
 .item-card{
   min-width:90px;
   background:rgba(0,255,255,0.05);
@@ -266,44 +292,88 @@ body{
   transform-style:preserve-3d;
 }
 
-/* RGB GLOW */
-.item-card::before{
+/* GLOW RARITY BERBEDA */
+.item-card.legendary::before{
   content:"";
   position:absolute;
   inset:-2px;
-  background:linear-gradient(45deg, red, cyan, blue, lime);
-  filter:blur(8px);
+  background:linear-gradient(45deg, gold, orange, gold);
+  filter:blur(10px);
   opacity:0;
   transition:0.3s;
   z-index:-1;
-  animation:rgb 3s linear infinite;
+  animation:glow 2s ease-in-out infinite alternate;
+}
+
+.item-card.epic::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:linear-gradient(45deg, violet, magenta, violet);
+  filter:blur(10px);
+  opacity:0;
+  transition:0.3s;
+  z-index:-1;
+  animation:glow 2s ease-in-out infinite alternate;
+}
+
+.item-card.rare::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:linear-gradient(45deg, cyan, blue, cyan);
+  filter:blur(10px);
+  opacity:0;
+  transition:0.3s;
+  z-index:-1;
+  animation:glow 2s ease-in-out infinite alternate;
+}
+
+.item-card.normal::before{
+  content:"";
+  position:absolute;
+  inset:-2px;
+  background:linear-gradient(45deg, lime, green, lime);
+  filter:blur(10px);
+  opacity:0;
+  transition:0.3s;
+  z-index:-1;
+  animation:glow 2s ease-in-out infinite alternate;
+}
+
+@keyframes glow{
+  0%{opacity:0.5; transform:scale(1);}
+  100%{opacity:1; transform:scale(1.05);}
 }
 
 .item-card:hover::before{
   opacity:1;
 }
 
-@keyframes rgb{
-  100%{transform:rotate(360deg);}
-}
-
 .item-card:hover{
   transform:scale(1.1);
 }
 
-/* IMAGE */
 .item-card img{
   width:100%;
   border-radius:6px;
 }
 
-/* NAME */
 .item-name{
   font-size:10px;
   margin-top:4px;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
 }
 
-/* EQUIPPED */
+.item-price{
+  font-size:9px;
+  color:gold;
+  font-weight:700;
+}
+
+/* LABELS */
 .equipped{
   position:absolute;
   top:4px;
@@ -313,48 +383,63 @@ body{
   color:black;
   padding:2px 4px;
   border-radius:4px;
+  box-shadow:0 0 5px lime;
 }
 
-/* SKELETON */
-.skeleton{
-  min-width:90px;
-  height:90px;
-  border-radius:10px;
-  background:linear-gradient(90deg,#111,#222,#111);
-  animation:loading 1.2s infinite;
-}
-
-@keyframes loading{
-  0%{background-position:-100px}
-  100%{background-position:200px}
-}
-
-/* PRICE */
-.item-price{
-  font-size:9px;
-  color:cyan;
-}
-
-/* LIMITED */
 .limited{
   position:absolute;
   top:4px;
   right:4px;
   font-size:8px;
-  background:purple;
+  background:linear-gradient(45deg, purple, magenta);
+  color:white;
   padding:2px 4px;
   border-radius:4px;
+  box-shadow:0 0 5px purple;
+  animation:pulse 1.5s infinite;
 }
 
-/* RARITY */
-.item-card.legendary{
-  box-shadow:0 0 15px gold;
+@keyframes pulse{
+  0%,100%{transform:scale(1);}
+  50%{transform:scale(1.1);}
 }
 
-.item-card.epic{
-  box-shadow:0 0 15px violet;
+/* SKELETON ULTRA SMOOTH */
+.skeleton{
+  min-width:90px;
+  height:110px;
+  border-radius:10px;
+  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  background-size:200% 100%;
+  animation:loading 1.5s ease-in-out infinite;
+  position:relative;
+  overflow:hidden;
 }
 
-.item-card.rare{
-  box-shadow:0 0 15px cyan;
+.skeleton::after{
+  content:'';
+  position:absolute;
+  top:0;
+  left:-100%;
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  animation:shimmer 1.5s infinite;
+}
+
+@keyframes loading{
+  0%{background-position:200% 0;}
+  100%{background-position:-200% 0;}
+}
+
+@keyframes shimmer{
+  0%{left:-100%;}
+  100%{left:100%;}
+}
+
+/* RESPONSIVE */
+@media(max-width:480px){
+  .header{flex-direction:column;text-align:center;}
+  .username-input{flex-direction:column;}
+  .stats{grid-template-columns:1fr 1fr;}
 }
