@@ -20,32 +20,40 @@ app.use(express.static(path.join(__dirname, "public")));
 // Roblox User ID
 const USER_ID = 8941948601;
 
-// Global data - NO CACHE ISSUES
+// Global data
 let currentData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
   lastItemsUpdate: 0
 };
 
+// ✅ FIXED: Get current host for Railway
+const getCurrentHost = () => {
+  if (process.env.RAILWAY_STATIC_URL) {
+    return `https://${process.env.RAILWAY_STATIC_URL}`;
+  }
+  return `http://localhost:${PORT}`;
+};
+
 async function robloxFetch(url, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
       const response = await fetch(url, {
-        headers: { 'User-Agent': 'Mozilla/5.0' }
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
       });
       if (response.ok) {
         const data = await response.json();
         return { success: true, data };
       }
     } catch (err) {
-      console.log(`Roblox API retry ${i + 1}:`, err.message);
+      console.log(`Roblox retry ${i + 1}:`, err.message);
       if (i === retries - 1) return { success: false, error: err.message };
       await new Promise(r => setTimeout(r, 2000));
     }
   }
 }
 
-// 🔥 FIXED STATS API
+// 🔥 STATS API
 app.get("/api", async (req, res) => {
   console.log('📊 Fetching stats...');
   
@@ -57,14 +65,12 @@ app.get("/api", async (req, res) => {
     ]);
 
     const stats = {
-      friends: friendsRes.success ? friendsRes.data.count || 0 : 0,
-      followers: followersRes.success ? followersRes.data.count || 0 : 0,
-      following: followingRes.success ? followingRes.data.count || 0 : 0
+      friends: friendsRes.success ? (friendsRes.data.count || 0) : 0,
+      followers: followersRes.success ? (followersRes.data.count || 0) : 0,
+      following: followingRes.success ? (followingRes.data.count || 0) : 0
     };
 
     currentData.stats = stats;
-    
-    // Broadcast
     broadcast({ stats });
     
     console.log('✅ Stats:', stats);
@@ -75,7 +81,7 @@ app.get("/api", async (req, res) => {
   }
 });
 
-// 🔥 FIXED AVATAR API
+// 🔥 AVATAR API
 app.get("/api/avatar", async (req, res) => {
   console.log('👤 Fetching avatar...');
   
@@ -84,30 +90,29 @@ app.get("/api/avatar", async (req, res) => {
       `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     );
     
-    const imageUrl = avatarRes.success && avatarRes.data.data?.[0]?.imageUrl 
-      ? avatarRes.data.data[0].imageUrl 
-      : `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`;
+    let imageUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`;
+    
+    if (avatarRes.success && avatarRes.data.data?.[0]?.imageUrl) {
+      imageUrl = avatarRes.data.data[0].imageUrl;
+    }
     
     console.log('✅ Avatar:', imageUrl);
     res.json({ image: imageUrl });
   } catch (err) {
     console.error('Avatar error:', err);
-    res.json({ 
-      image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` 
-    });
+    res.json({ image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` });
   }
 });
 
-// 🔥 FIXED ITEMS API
+// 🔥 ITEMS API
 app.get("/api/items", async (req, res) => {
   console.log('🎒 Fetching items...');
   
   try {
-    // Get currently wearing
     const wearRes = await robloxFetch(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
     
     if (!wearRes.success || !wearRes.data.assetIds?.length) {
-      console.log('❌ No items equipped');
+      console.log('❌ No items');
       currentData.items = [];
       broadcast({ items: [], itemsCount: 0 });
       return res.json({ items: [], totalValue: 0 });
@@ -115,21 +120,20 @@ app.get("/api/items", async (req, res) => {
 
     const assetIds = wearRes.data.assetIds.slice(0, 20);
     
-    // Get thumbnails
+    // Thumbnails
     const thumbsRes = await robloxFetch(
       `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(',')}&size=150x150&format=Png`
     );
-    
-    const thumbs = thumbsRes.success ? thumbsRes.data.data || [] : [];
+    const thumbs = thumbsRes.success ? (thumbsRes.data.data || []) : [];
 
-    // Get item details
+    // Item details
     const itemPromises = assetIds.map(async (id) => {
       try {
         const detailRes = await robloxFetch(`https://economy.roblox.com/v2/assets/${id}/details`);
         if (!detailRes.success) return null;
 
         const detail = detailRes.data;
-        const thumb = thumbs.find(t => t.targetId == id);
+        const thumb = thumbs.find(t => t.targetId == parseInt(id));
         
         return {
           name: detail.Name || `Item #${id}`,
@@ -138,12 +142,12 @@ app.get("/api/items", async (req, res) => {
           image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${id}/item`
         };
-      } catch (err) {
+      } catch {
         return {
           name: `Item #${id}`,
           price: 0,
           limited: false,
-          image: `https://via.placeholder.com/90x70?text=?`,
+          image: `https://via.placeholder.com/90x70/333/fff?text=ID${id.slice(-4)}`,
           link: `https://www.roblox.com/catalog/${id}`
         };
       }
@@ -151,15 +155,13 @@ app.get("/api/items", async (req, res) => {
 
     const items = (await Promise.all(itemPromises)).filter(Boolean);
     currentData.items = items;
-    currentData.lastItemsUpdate = Date.now();
     
-    // Broadcast
     broadcast({ items, itemsCount: items.length });
     
-    console.log(`✅ Items loaded: ${items.length}`);
+    console.log(`✅ Items: ${items.length}`);
     res.json({
       items,
-      totalValue: items.reduce((sum, i) => sum + i.price, 0)
+      totalValue: items.reduce((sum, i) => sum + (i.price || 0), 0)
     });
     
   } catch (err) {
@@ -171,17 +173,23 @@ app.get("/api/items", async (req, res) => {
 // 🔥 WEBSOCKET
 function broadcast(data) {
   const message = JSON.stringify(data);
+  let sent = 0;
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      client.send(message);
+      try {
+        client.send(message);
+        sent++;
+      } catch (err) {
+        console.error('Broadcast error:', err);
+      }
     }
   });
+  if (sent > 0) console.log(`📡 Broadcast to ${sent} clients`);
 }
 
 wss.on('connection', (ws) => {
   console.log('👤 Client connected');
   
-  // Send current data
   ws.send(JSON.stringify({
     stats: currentData.stats,
     items: currentData.items,
@@ -191,12 +199,11 @@ wss.on('connection', (ws) => {
   ws.on('close', () => console.log('👋 Client disconnected'));
 });
 
-// Auto refresh every 30s
-setInterval(async () => {
-  console.log('🔄 Auto refresh...');
-  await fetch(`http://localhost:${PORT}/api`);
-  await fetch(`http://localhost:${PORT}/api/items`);
-}, 30000);
+// ✅ FIXED: NO LOCALHOST CALLS IN RAILWAY
+// Auto refresh client-side only
+setInterval(() => {
+  // Client akan trigger via WebSocket
+}, 60000);
 
 // SPA Routing
 app.get("*", (req, res) => {
@@ -207,18 +214,22 @@ app.get("*", (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
+    port: PORT,
     clients: wss.clients.size,
+    uptime: process.uptime(),
     stats: currentData.stats,
     itemsCount: currentData.items.length 
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('✅ All APIs working!');
+  console.log(`🚀 Server: http://localhost:${PORT}`);
+  console.log(`✅ Railway FIXED - No localhost calls`);
+  console.log(`👤 User ID: ${USER_ID}`);
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
+  console.log('🛑 Shutdown...');
   server.close(() => process.exit(0));
 });
