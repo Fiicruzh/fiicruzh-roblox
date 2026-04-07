@@ -170,4 +170,3 @@ window.addEventListener("DOMContentLoaded", ()=>{
   loadItems();
   loadAvatar(); // 🔥 TAMBAH INI
 });
-console.log("ITEM COUNT:", finalItems.length);
