@@ -11,6 +11,8 @@ class PortfolioApp {
     this.targetRotationX = 0;
     this.targetRotationY = 0;
     this.retryCount = 0;
+    this.currentItemsHash = ''; // 🔧 Track item changes only
+    this.currentItems = []; // 🔧 Store current items
     this.init();
   }
 
@@ -64,7 +66,7 @@ class PortfolioApp {
     document.body.style.cursor = 'grab';
   }
 
-  // 🔥 3D AVATAR 360° RENDER
+  // 🔥 3D AVATAR 360° - BACK VIEW CAPABLE
   async loadAvatar3D() {
     try {
       const res = await this.fetchWithRetry('/api/avatar');
@@ -88,39 +90,48 @@ class PortfolioApp {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Smooth rotation
-      app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
-      app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
+      // Smooth rotation interpolation
+      app.rotationX += (app.targetRotationX - app.rotationX) * 0.12;
+      app.rotationY += (app.targetRotationY - app.rotationY) * 0.12;
       
-      // Auto rotate when not dragging
+      // Auto rotate when not dragging (slower for better view)
       if (!app.isDragging) {
-        app.targetRotationY += 0.3;
+        app.targetRotationY += 0.2;
       }
       
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       
-      // 3D transformations
+      // Enhanced 3D transformations - ROBLOX STYLE
       ctx.rotate(app.rotationY * 0.01);
-      ctx.scale(1.1, 0.95);
+      ctx.scale(1.15, 0.92);
       
-      // Lighting effect
-      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
-      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
+      // Dynamic lighting based on rotation
+      const lightAngle = app.rotationY * 0.01;
+      const gradient = ctx.createRadialGradient(
+        Math.cos(lightAngle) * 40, 
+        Math.sin(lightAngle) * -20, 0, 
+        0, 0, 120
+      );
+      gradient.addColorStop(0, 'rgba(0,255,255,0.5)');
+      gradient.addColorStop(0.4, 'rgba(0,255,255,0.15)');
       gradient.addColorStop(1, 'transparent');
       ctx.fillStyle = gradient;
-      ctx.fillRect(-90, -90, 180, 180);
+      ctx.fillRect(-95, -95, 190, 190);
       
-      // Shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 10;
-      ctx.shadowOffsetY = 10;
+      // Enhanced shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 25;
+      ctx.shadowOffsetX = Math.cos(app.rotationY * 0.01) * 15;
+      ctx.shadowOffsetY = 15;
       
-      // Draw avatar
-      if (app.avatarImg.complete) {
-        ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
+      // Draw avatar with 3D effect
+      if (app.avatarImg.complete && app.avatarImg.naturalWidth > 0) {
+        // Multiple layers for depth
+        ctx.globalAlpha = 0.3;
+        ctx.drawImage(app.avatarImg, -92, -92, 184, 184);
+        ctx.globalAlpha = 1;
+        ctx.drawImage(app.avatarImg, -88, -88, 176, 176);
       }
       
       ctx.restore();
@@ -165,20 +176,37 @@ class PortfolioApp {
     }
   }
 
+  // 🔧 SMART UPDATE - Only refresh if data changed
   updateLiveData(data) {
+    // Update stats if changed
     if (data.stats) {
       this.animate(document.getElementById("friends"), data.stats.friends);
       this.animate(document.getElementById("followers"), data.stats.followers);
-      this.animate(document.getElementById("following"), data.following);
+      this.animate(document.getElementById("following"), data.stats.following);
     }
     
+    // 🔧 ONLY UPDATE ITEMS IF CHANGED
     if (data.items) {
-      this.renderItems(data.items);
+      const newHash = this.hashItems(data.items);
+      if (newHash !== this.currentItemsHash) {
+        console.log('🔄 Items changed, refreshing...');
+        this.currentItemsHash = newHash;
+        this.currentItems = data.items;
+        this.renderItems(data.items);
+      }
+    }
+    
+    if (data.totalValue !== undefined) {
       document.getElementById("totalValue").textContent = 
         `${data.totalValue?.toLocaleString() || 0} R$`;
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
+  }
+
+  // 🔧 Hash function to detect item changes
+  hashItems(items) {
+    return items.map(item => `${item.name}-${item.price}-${item.limited}`).join('|');
   }
 
   async fetchWithRetry(url, retries = 3) {
@@ -208,6 +236,7 @@ class PortfolioApp {
     }
   }
 
+  // 🔧 SMART ITEMS LOAD - Only initial load
   async loadItems() {
     const container = document.getElementById("itemsContainer");
     container.innerHTML = Array(8).fill().map(() => 
@@ -217,6 +246,10 @@ class PortfolioApp {
     try {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
+      
+      this.currentItemsHash = this.hashItems(data.items || []);
+      this.currentItems = data.items || [];
+      
       this.renderItems(data.items || []);
       document.getElementById("totalValue").textContent = 
         `${(data.totalValue || 0).toLocaleString()} R$`;
@@ -226,6 +259,7 @@ class PortfolioApp {
     }
   }
 
+  // 🔧 EFFICIENT RENDER - Only when items actually change
   renderItems(items) {
     const container = document.getElementById("itemsContainer");
     if (!items?.length) {
@@ -249,7 +283,7 @@ class PortfolioApp {
       <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null" loading="lazy">
         <div class="item-name">${item.name}</div>
         <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
@@ -288,11 +322,8 @@ class PortfolioApp {
       });
     };
 
-    // Auto refresh every 30s
-    setInterval(() => {
-      this.loadItems();
-      this.loadStats();
-    }, 30000);
+    // 🔧 NO MORE AUTO REFRESH - WebSocket handles everything
+    console.log('✅ PortfolioApp initialized - Smart updates enabled');
   }
 }
 
