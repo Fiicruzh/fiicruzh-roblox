@@ -21,7 +21,7 @@ const wss = new WebSocket.Server({
   perMessageDeflate: false
 });
 
-// Static files - FIXED SYNTAX
+// Static files
 app.use(express.static(path.join(__dirname, "public")));
 
 console.log("📁 Public folder:", path.join(__dirname, "public"));
@@ -188,9 +188,11 @@ app.get("/api/items", async (req, res) => {
         });
 
       } catch (itemErr) {
+        // 🔥 FIXED: Ensure id is always a string before calling slice()
+        const idStr = String(id);
         result.push({
-          name: `Item #${id.slice(-4)}`,
-          image: `https://via.placeholder.com/150x150/333/aaa?text=#${id.slice(-4)}`,
+          name: `Item #${idStr.slice(-4)}`,
+          image: `https://via.placeholder.com/150x150/333/aaa?text=#${idStr.slice(-4)}`,
           link: `https://www.roblox.com/catalog/${id}`,
           limited: false
         });
@@ -230,11 +232,10 @@ wss.on('connection', (ws) => {
   ws.onerror = (err) => console.log('WS error:', err.message);
 });
 
-// FIXED AUTO UPDATE - NO FETCH CALLS
+// FIXED AUTO UPDATE
 setInterval(async () => {
   console.log('🔄 Background refresh...');
   try {
-    // Trigger cache refresh without external calls
     cachedData.lastUpdate = Date.now() - CACHE_DURATION + 1000;
     console.log('✅ Cache refreshed');
   } catch (err) {
