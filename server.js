@@ -14,46 +14,59 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, "public")));
 
-const USER_ID = 8941948601;
+// 🔥 USERNAME SUPPORT
+const USERNAME = "dapaarowr4";
+let USER_ID = null;
 
-// 🔥 CACHE BIAR GA 0 TERUS
-let cache = {
-  friends: 0,
-  followers: 0,
-  following: 0
-};
+// 🔥 SMART RETRY FETCH
+async function smartFetch(url, retries = 3){
+  try{
+    const res = await fetch(url);
+    if(!res.ok) throw new Error("fail");
+    return await res.json();
+  }catch{
+    if(retries > 0){
+      await new Promise(r => setTimeout(r, 500));
+      return smartFetch(url, retries - 1);
+    }
+    return null;
+  }
+}
+
+// 🔥 GET USER ID FROM USERNAME
+async function getUserId(){
+  const data = await smartFetch("https://users.roblox.com/v1/usernames/users", {
+    method:"POST",
+    headers:{ "Content-Type":"application/json" },
+    body: JSON.stringify({ usernames:[USERNAME] })
+  });
+
+  if(data?.data?.[0]){
+    USER_ID = data.data[0].id;
+  }
+}
 
 // ==========================
-// 🔥 API STATS (FIXED)
+// 🔥 API STATS
 // ==========================
 app.get("/api", async (req,res)=>{
   try{
-    const [friendsRes, followersRes, followingRes] = await Promise.all([
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+    if(!USER_ID) await getUserId();
+
+    const [friends, followers, following] = await Promise.all([
+      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
     ]);
 
-    const friends = await friendsRes.json();
-    const followers = await followersRes.json();
-    const following = await followingRes.json();
+    res.json({
+      friends: friends?.count || 0,
+      followers: followers?.count || 0,
+      following: following?.count || 0
+    });
 
-    const data = {
-      friends: friends?.count ?? cache.friends,
-      followers: followers?.count ?? cache.followers,
-      following: following?.count ?? cache.following
-    };
-
-    // 🔥 UPDATE CACHE
-    cache = data;
-
-    res.json(data);
-
-  }catch(err){
-    console.log("API ERROR:", err);
-
-    // 🔥 FALLBACK KE DATA TERAKHIR
-    res.json(cache);
+  }catch{
+    res.json({friends:0,followers:0,following:0});
   }
 });
 
@@ -61,74 +74,75 @@ app.get("/api", async (req,res)=>{
 // 🔥 AVATAR
 // ==========================
 app.get("/api/avatar", async (req,res)=>{
-  try{
-    const avatar = await fetch(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    ).then(r=>r.json());
+  if(!USER_ID) await getUserId();
 
-    res.json({
-      image: avatar.data?.[0]?.imageUrl || null
-    });
+  const avatar = await smartFetch(
+    `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png`
+  );
 
-  }catch{
-    res.json({image:null});
-  }
+  res.json({
+    image: avatar?.data?.[0]?.imageUrl || null
+  });
 });
 
 // ==========================
-// 🔥 ITEMS
+// 🔥 ITEMS + TOTAL PRICE
 // ==========================
 app.get("/api/items", async (req,res)=>{
-  try{
-    const wear = await fetch(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    ).then(r=>r.json());
+  if(!USER_ID) await getUserId();
 
-    let ids = wear.assetIds || [];
+  const wear = await smartFetch(
+    `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+  );
 
-    if(ids.length === 0){
-      return res.json([]);
-    }
+  const ids = wear?.assetIds || [];
 
-    const thumbs = await fetch(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
-    ).then(r=>r.json());
+  if(!ids.length) return res.json({items:[], total:0});
 
-    const result = [];
+  const thumbs = await smartFetch(
+    `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}`
+  );
 
-    for(const id of ids){
-      try{
-        const detail = await fetch(
-          `https://economy.roblox.com/v2/assets/${id}/details`
-        ).then(r=>r.json());
+  let total = 0;
+  const result = [];
 
-        const thumb = thumbs.data?.find(t => t.targetId === id);
+  for(const id of ids){
+    const detail = await smartFetch(
+      `https://economy.roblox.com/v2/assets/${id}/details`
+    );
 
-        result.push({
-          name: detail.Name || "Unknown",
-          price: detail.PriceInRobux || 0,
-          limited: detail.IsLimited || detail.IsLimitedUnique || false,
-          image: thumb?.imageUrl || "https://via.placeholder.com/150",
-          link: `https://www.roblox.com/catalog/${id}`
-        });
+    const thumb = thumbs?.data?.find(t => t.targetId === id);
 
-      }catch{
-        result.push({
-          name:"Unknown",
-          price:0,
-          limited:false,
-          image:"https://via.placeholder.com/150",
-          link:"#"
-        });
-      }
-    }
+    const price = detail?.PriceInRobux || 0;
+    total += price;
 
-    res.json(result);
-
-  }catch(err){
-    console.log("ITEM ERROR:", err);
-    res.json([]);
+    result.push({
+      name: detail?.Name || "Unknown",
+      price,
+      limited: detail?.IsLimited || detail?.IsLimitedUnique || false,
+      image: thumb?.imageUrl || "",
+      link: `https://www.roblox.com/catalog/${id}`
+    });
   }
+
+  res.json({items:result, total});
+});
+
+// ==========================
+// 🔥 WEBSOCKET REALTIME
+// ==========================
+wss.on("connection", (ws)=>{
+  console.log("Client connected");
+
+  setInterval(async ()=>{
+    if(!USER_ID) await getUserId();
+
+    const wear = await smartFetch(
+      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+    );
+
+    ws.send(JSON.stringify(wear));
+  }, 5000);
 });
 
 // ==========================
@@ -136,49 +150,5 @@ app.get("*", (req,res)=>{
   res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
-app.get("/api/user/:username", async (req,res)=>{
-  try{
-    const username = req.params.username;
-
-    const data = await fetch("https://users.roblox.com/v1/usernames/users",{
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
-      body: JSON.stringify({
-        usernames:[username]
-      })
-    }).then(r=>r.json());
-
-    res.json({
-      id: data.data?.[0]?.id || null
-    });
-
-  }catch{
-    res.json({id:null});
-  }
-});
-
 const PORT = process.env.PORT || 3000;
-async function broadcast(){
-  try{
-    const stats = await fetch(`http://127.0.0.1:${PORT}/api`)
-    const items = await fetch(`http://localhost:${PORT}/api/items`).then(r=>r.json());
-
-    wss.clients.forEach(client=>{
-      if(client.readyState === 1){
-        client.send(JSON.stringify({
-          type:"stats",
-          ...stats
-        }));
-
-        client.send(JSON.stringify({
-          type:"items",
-          items
-        }));
-      }
-    });
-
-  }catch{}
-}
-
-setInterval(broadcast, 5000);
 server.listen(PORT, ()=>console.log("SERVER LIVE ⚡"));
