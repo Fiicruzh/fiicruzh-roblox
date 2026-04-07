@@ -73,7 +73,7 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   }
 }
 
-// 🔥 AUTO UPDATE FUNCTION - HANYA PAKAIAN & AKSESORIS
+// 🔥 AUTO UPDATE FUNCTION - HANYA PAKAIAN & AKSESORIS (FIXED ERROR HANDLING)
 async function refreshAllData() {
   console.log('🔄 [AUTO] Checking Roblox updates (Clothing+Accessories only)...');
   
@@ -91,18 +91,35 @@ async function refreshAllData() {
       following: 0
     };
 
-    if (friendsRes.status === 'fulfilled') {
-      try { newStats.friends = (await friendsRes.value.json()).count || 0; } catch {}
+    if (friendsRes.status === 'fulfilled' && friendsRes.value) {
+      try { 
+        const data = await friendsRes.value.json();
+        newStats.friends = data?.count || 0; 
+      } catch {}
     }
-    if (followersRes.status === 'fulfilled') {
-      try { newStats.followers = (await followersRes.value.json()).count || 0; } catch {}
+    if (followersRes.status === 'fulfilled' && followersRes.value) {
+      try { 
+        const data = await followersRes.value.json();
+        newStats.followers = data?.count || 0; 
+      } catch {}
     }
-    if (followingRes.status === 'fulfilled') {
-      try { newStats.following = (await followingRes.value.json()).count || 0; } catch {}
+    if (followingRes.status === 'fulfilled' && followingRes.value) {
+      try { 
+        const data = await followingRes.value.json();
+        newStats.following = data?.count || 0; 
+      } catch {}
     }
 
-    // 2. Refresh Items - HANYA PAKAIAN & AKSESORIS
-    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    // 2. Refresh Items - HANYA PAKAIAN & AKSESORIS (FIXED)
+    let wearRes;
+    try {
+      wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+      if (!wearRes || !wearRes.ok) throw new Error('Wear API failed');
+    } catch (err) {
+      console.log('❌ Wear API failed:', err.message);
+      return; // Skip jika gagal load avatar
+    }
+    
     const wear = await wearRes.json();
     let allIds = wear.assetIds || [];
     console.log(`👕 [AUTO] Found ${allIds.length} equipped items (filtering clothing+accessories)`);
@@ -112,11 +129,18 @@ async function refreshAllData() {
     let newItems = [];
 
     if (allIds.length > 0) {
-      // Batch fetch details untuk semua items dulu
-      const detailsPromises = allIds.map(id => 
-        fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`, 2, 500)
-          .then(res => res.json().catch(() => null))
-      );
+      // Batch fetch details untuk semua items (SAFE HANDLING)
+      const detailsPromises = allIds.map(async (id) => {
+        try {
+          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`, 1, 300);
+          if (detailRes && detailRes.ok) {
+            return await detailRes.json();
+          }
+        } catch (err) {
+          console.log(`⚠️ Detail failed for ${id}`);
+        }
+        return null;
+      });
       
       const detailsResults = await Promise.all(detailsPromises);
       
@@ -137,14 +161,17 @@ async function refreshAllData() {
         let thumbs = [];
         try {
           const thumbsRes = await fetchWithRetry(
-            `https://thumbnails.roblox.com/v1/assets?assetIds=${filteredIds.join(",")}&size=150x150&format=Png`
+            `https://thumbnails.roblox.com/v1/assets?assetIds=${filteredIds.join(",")}&size=150x150&format=Png`,
+            2, 500
           );
-          thumbs = await thumbsRes.json();
+          if (thumbsRes && thumbsRes.ok) {
+            thumbs = await thumbsRes.json();
+          }
         } catch (e) {
-          console.log('Thumbs batch failed');
+          console.log('⚠️ Thumbs batch failed');
         }
 
-        // Process filtered items
+        // Process filtered items (SAFE)
         for (let i = 0; i < filteredIds.length; i++) {
           const id = filteredIds[i];
           const detail = detailsResults.find(d => d && String(d.AssetId) === String(id));
@@ -161,6 +188,7 @@ async function refreshAllData() {
             });
 
           } catch (itemErr) {
+            console.log(`⚠️ Item process error ${id}:`, itemErr.message);
             const idStr = String(id);
             newItems.push({
               name: `Item #${idStr.slice(-4)}`,
@@ -221,13 +249,15 @@ app.get("/api/avatar", async (req, res) => {
       `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     );
     
-    const avatar = await avatarRes.json();
-    console.log('✅ Avatar OK');
-    
-    res.json({
-      image: avatar.data?.[0]?.imageUrl || null
-    });
-
+    if (avatarRes && avatarRes.ok) {
+      const avatar = await avatarRes.json();
+      console.log('✅ Avatar OK');
+      res.json({
+        image: avatar.data?.[0]?.imageUrl || null
+      });
+    } else {
+      res.json({ image: null });
+    }
   } catch (err) {
     console.error("Avatar error:", err.message);
     res.json({ image: null });
