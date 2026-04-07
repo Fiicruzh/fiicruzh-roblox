@@ -160,17 +160,7 @@ class PortfolioApp {
     return "";
   }
 
-  createItemCard(item, index) {
-    const rarity = this.getRarity(item.price);
-    return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
-        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
-        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/333/ccc?text=?';this.onerror=null;" loading="lazy">
-        <div class="item-name">${item.name}</div>
-      </div>
-    `;
-  }
+  tampilan grid kartu mini agar bisa di scrol kiri dan kanan
 
   animate(el, end) {
     end = Number(end) || 0;
