@@ -108,8 +108,9 @@ if(avatar){
 // ============================
 
 window.addEventListener("DOMContentLoaded", ()=>{
+  loadAvatar();
+  loadStats();
   loadItems();
-  loadAvatar(); // 🔥 TAMBAH INI
 });
 
 function getRarity(price){
@@ -195,7 +196,11 @@ async function loadItems(){
 // 🔴 WEBSOCKET LIVE UPDATE
 // ======================
 
-const ws = new WebSocket(location.origin.replace("http","ws"));
+const ws = new WebSocket(
+  location.protocol === "https:"
+    ? "wss://" + location.host
+    : "ws://" + location.host
+);
 
 ws.onmessage = (msg)=>{
   try{
@@ -215,3 +220,26 @@ ws.onmessage = (msg)=>{
     console.log("WS ERROR", e);
   }
 };
+
+async function loadStats(){
+  try{
+    const res = await fetch("/api");
+    const data = await res.json();
+
+    animate(document.getElementById("friends"), data.friends);
+    animate(document.getElementById("followers"), data.followers);
+    animate(document.getElementById("following"), data.following);
+  }catch{
+    console.log("fallback stats gagal");
+  }
+}
+
+async function loadItems(){
+  try{
+    const res = await fetch("/api/items");
+    const items = await res.json();
+    renderItems(items);
+  }catch{
+    console.log("fallback item gagal");
+  }
+}
