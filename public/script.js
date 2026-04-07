@@ -1,111 +1,198 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.lastData = { stats: {}, items: [] };
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.avatarMesh = null;
+    this.loader = null;
+    this.isDragging = false;
+    this.lastMouseX = 0;
+    this.lastMouseY = 0;
+    this.rotationY = 0;
+    this.rotationX = 0;
+    this.targetRotationY = 0;
+    this.targetRotationX = 0;
     this.retryCount = 0;
+    this.lastDataHash = '';
     this.init();
   }
 
   init() {
-    this.initThreeJS();
+    this.setupThreeJS();
+    this.loadRobloxAvatar();
     this.connectWebSocket();
     this.loadStats();
     this.loadItems();
     this.addInteractions();
   }
 
-  // 🎮 THREE.JS 3D AVATAR
-  initThreeJS() {
+  setupThreeJS() {
     const container = document.getElementById('avatarContainer');
+    const canvas = document.getElementById('avatar3D');
     
-    // Scene
-    const scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x000011);
+    // Scene setup
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x000000);
     
     // Camera
-    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
-    camera.position.z = 3;
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    this.camera.position.set(2, 0.5, 2);
     
     // Renderer
-    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-    renderer.setSize(180, 180);
-    renderer.setPixelRatio(window.devicePixelRatio);
-    container.appendChild(renderer.domElement);
+    this.renderer = new THREE.WebGLRenderer({ 
+      canvas: canvas,
+      alpha: true,
+      antialias: true 
+    });
+    this.renderer.setSize(200, 200);
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
     
-    // Avatar texture
-    this.loadAvatarTexture(scene, renderer, camera);
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.6);
+    this.scene.add(ambientLight);
     
-    // Auto rotation
-    let rotationY = 0;
-    function animate() {
-      requestAnimationFrame(animate);
-      rotationY += 0.008;
-      scene.rotation.y = rotationY;
-      renderer.render(scene, camera);
-    }
-    animate();
-
-    // Responsive
-    window.addEventListener('resize', () => {
-      camera.aspect = 1;
-      camera.updateProjectionMatrix();
-      renderer.setSize(180, 180);
+    const directionalLight = new THREE.DirectionalLight(0x00ffff, 1);
+    directionalLight.position.set(1, 1, 1);
+    this.scene.add(directionalLight);
+    
+    const pointLight = new THREE.PointLight(0x00ffff, 0.5, 10);
+    pointLight.position.set(-1, 1, 1);
+    this.scene.add(pointLight);
+    
+    // GLTF Loader
+    const { GLTFLoader } = THREE;
+    this.loader = new GLTFLoader();
+    
+    // Auto rotation & render loop
+    this.animate();
+    
+    // Mouse controls
+    canvas.addEventListener('mousedown', (e) => this.startDrag(e));
+    canvas.addEventListener('mousemove', (e) => this.drag(e));
+    canvas.addEventListener('mouseup', () => this.stopDrag());
+    canvas.addEventListener('mouseleave', () => this.stopDrag());
+    
+    // Touch support
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      this.startDrag(e.touches[0]);
+    });
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.drag(e.touches[0]);
+    });
+    canvas.addEventListener('touchend', () => {
+      this.stopDrag();
     });
   }
 
-  loadAvatarTexture(scene, renderer, camera) {
-    fetch('/api/avatar')
-      .then(res => res.json())
-      .then(data => {
-        if (data.image) {
-          const texture = new THREE.TextureLoader().load(data.image);
-          const geometry = new THREE.SphereGeometry(1, 32, 32);
-          const material = new THREE.MeshPhongMaterial({ 
-            map: texture,
-            shininess: 100
-          });
-          const sphere = new THREE.Mesh(geometry, material);
-          sphere.scale.x = 1.2;
-          scene.add(sphere);
-
-          // Lighting
-          const light = new THREE.DirectionalLight(0xffffff, 1);
-          light.position.set(1, 1, 1);
-          scene.add(light);
-          scene.add(new THREE.AmbientLight(0x404040));
-        } else {
-          this.createFallbackAvatar(scene);
-        }
-      })
-      .catch(() => {
-        this.createFallbackAvatar(scene);
-      });
+  startDrag(e) {
+    this.isDragging = true;
+    this.lastMouseX = e.clientX;
+    this.lastMouseY = e.clientY;
   }
 
-  createFallbackAvatar(scene) {
-    const geometry = new THREE.SphereGeometry(1, 32, 32);
+  drag(e) {
+    if (!this.isDragging) return;
+    
+    const deltaX = e.clientX - this.lastMouseX;
+    const deltaY = e.clientY - this.lastMouseY;
+    
+    this.targetRotationY += deltaX * 0.01;
+    this.targetRotationX += deltaY * 0.01;
+    
+    this.lastMouseX = e.clientX;
+    this.lastMouseY = e.clientY;
+  }
+
+  stopDrag() {
+    this.isDragging = false;
+  }
+
+  animate() {
+    requestAnimationFrame(() => this.animate());
+    
+    // Smooth rotation interpolation
+    this.rotationY += (this.targetRotationY - this.rotationY) * 0.1;
+    this.rotationX += (this.targetRotationX - this.rotationX) * 0.1;
+    
+    // Auto rotate when not dragging
+    if (!this.isDragging) {
+      this.targetRotationY += 0.003;
+    }
+    
+    // Rotate avatar
+    if (this.avatarMesh) {
+      this.avatarMesh.rotation.y = this.rotationY;
+      this.avatarMesh.rotation.x = Math.max(-Math.PI/4, Math.min(Math.PI/4, this.rotationX));
+    }
+    
+    this.renderer.render(this.scene, this.camera);
+  }
+
+  async loadRobloxAvatar() {
+    try {
+      const res = await this.fetchWithRetry('/api/avatar3d');
+      const data = await res.json();
+      
+      if (data.gltfUrl) {
+        this.loadGLTF(data.gltfUrl);
+      } else {
+        this.showFallbackAvatar();
+      }
+    } catch (err) {
+      console.error('Avatar load failed:', err);
+      this.showFallbackAvatar();
+    }
+  }
+
+  loadGLTF(url) {
+    // Clear previous model
+    if (this.avatarMesh) {
+      this.scene.remove(this.avatarMesh);
+    }
+
+    this.loader.load(
+      url,
+      (gltf) => {
+        const model = gltf.scene;
+        model.scale.set(1.5, 1.5, 1.5);
+        model.position.set(0, -0.5, 0);
+        this.scene.add(model);
+        this.avatarMesh = model;
+        console.log('✅ Roblox 3D Avatar loaded');
+      },
+      (progress) => {
+        console.log('Loading avatar:', (progress.loaded / progress.total * 100) + '%');
+      },
+      (error) => {
+        console.error('GLTF load error:', error);
+        this.showFallbackAvatar();
+      }
+    );
+  }
+
+  showFallbackAvatar() {
+    // Simple fallback cube with Roblox texture
+    const geometry = new THREE.BoxGeometry(1, 2, 0.5);
     const material = new THREE.MeshPhongMaterial({ 
       color: 0x00ffff,
-      shininess: 100,
-      emissive: 0x002222
+      shininess: 100 
     });
-    const sphere = new THREE.Mesh(geometry, material);
-    sphere.scale.x = 1.2;
-    scene.add(sphere);
-
-    const light = new THREE.DirectionalLight(0xffffff, 1);
-    light.position.set(1, 1, 1);
-    scene.add(light);
-    scene.add(new THREE.AmbientLight(0x404040));
+    const cube = new THREE.Mesh(geometry, material);
+    cube.rotation.y = Math.PI;
+    this.scene.add(cube);
+    this.avatarMesh = cube;
   }
 
-  // 🔥 WEBSOCKET - UPDATE ONLY IF CHANGED
+  // 🔥 WEBSOCKET REAL-TIME UPDATE (Smart - only on change)
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected');
+      console.log('✅ LIVE: WebSocket connected');
       document.getElementById('liveIndicator').textContent = '🟢';
       this.retryCount = 0;
     };
@@ -113,14 +200,14 @@ class PortfolioApp {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        this.updateIfChanged(data);
+        this.updateLiveData(data);
       } catch (err) {
         console.error('WS parse error:', err);
       }
     };
 
     this.ws.onclose = () => {
-      console.log('❌ WebSocket disconnected');
+      console.log('❌ LIVE: WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
       this.smartReconnect();
     };
@@ -130,41 +217,29 @@ class PortfolioApp {
     if (this.retryCount < 5) {
       setTimeout(() => {
         this.retryCount++;
+        console.log(`🔄 Reconnecting... (${this.retryCount}/5)`);
         this.connectWebSocket();
       }, 2000 * Math.pow(1.5, this.retryCount));
     }
   }
 
-  // ✅ UPDATE ONLY IF CHANGED - NO SPAM
-  updateIfChanged(newData) {
-    let hasChanges = false;
+  // Smart update - only if data changed
+  updateLiveData(data) {
+    const newHash = JSON.stringify(data);
+    if (newHash === this.lastDataHash) return; // No change, skip update
+    this.lastDataHash = newHash;
 
-    // Check stats changes
-    if (newData.stats) {
-      const statsChanged = 
-        newData.stats.friends !== this.lastData.stats.friends ||
-        newData.stats.followers !== this.lastData.stats.followers ||
-        newData.stats.following !== this.lastData.stats.following;
-      
-      if (statsChanged) {
-        this.animate(document.getElementById("friends"), newData.stats.friends);
-        this.animate(document.getElementById("followers"), newData.stats.followers);
-        this.animate(document.getElementById("following"), newData.stats.following);
-        hasChanges = true;
-      }
-      this.lastData.stats = newData.stats;
+    if (data.stats) {
+      this.animate(document.getElementById("friends"), data.stats.friends);
+      this.animate(document.getElementById("followers"), data.stats.followers);
+      this.animate(document.getElementById("following"), data.stats.following);
     }
-
-    // Check items changes
-    if (newData.items && JSON.stringify(newData.items) !== JSON.stringify(this.lastData.items)) {
-      this.renderItems(newData.items);
-      hasChanges = true;
-      this.lastData.items = newData.items;
+    
+    if (data.items) {
+      this.renderItems(data.items);
     }
-
-    if (hasChanges) {
-      document.getElementById('liveIndicator').textContent = '🟢';
-    }
+    
+    document.getElementById('liveIndicator').textContent = '🟢';
   }
 
   async fetchWithRetry(url, retries = 3) {
@@ -189,7 +264,6 @@ class PortfolioApp {
       this.animate(document.getElementById("friends"), data.friends || 0);
       this.animate(document.getElementById("followers"), data.followers || 0);
       this.animate(document.getElementById("following"), data.following || 0);
-      this.lastData.stats = data;
     } catch (err) {
       console.error('Stats failed:', err);
     }
@@ -205,7 +279,6 @@ class PortfolioApp {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
       this.renderItems(data.items || []);
-      this.lastData.items = data.items || [];
     } catch (err) {
       console.error('Items failed:', err);
       container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading...</div>';
@@ -232,10 +305,10 @@ class PortfolioApp {
   createItemCard(item, index) {
     const rarity = this.getRarity(item.price);
     return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/111/0ff?text=?';this.onerror=null" loading="lazy">
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null" loading="lazy">
         <div class="item-name">${item.name}</div>
       </div>
     `;
@@ -244,7 +317,7 @@ class PortfolioApp {
   animate(el, end) {
     end = Number(end) || 0;
     let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 800;
+    const duration = 1000;
     let startTime = null;
 
     const step = (timestamp) => {
