@@ -329,14 +329,26 @@ body{
   100%{background-position:200px}
 }
 
-/* RARITY COLOR */
-.rarity-common { border:1px solid #555; }
-.rarity-rare { border:1px solid cyan; }
-.rarity-epic { border:1px solid violet; }
-.rarity-legendary { border:1px solid gold; }
+/* PRICE */
+.item-price{
+  font-size:9px;
+  color:#aaa;
+}
 
-/* GLOW BERBEDA */
-.item-card.common:hover { box-shadow:0 0 10px #555; }
-.item-card.rare:hover { box-shadow:0 0 15px cyan; }
-.item-card.epic:hover { box-shadow:0 0 15px violet; }
-.item-card.legendary:hover { box-shadow:0 0 20px gold; }
+/* LIMITED */
+.limited{
+  position:absolute;
+  top:4px;
+  left:4px;
+  background:gold;
+  color:black;
+  font-size:8px;
+  padding:2px 4px;
+  border-radius:4px;
+}
+
+/* 🔥 RARITY COLORS */
+.common{ box-shadow:0 0 10px gray; }
+.epic{ box-shadow:0 0 15px purple; }
+.legendary{ box-shadow:0 0 20px orange; }
+.limited{ box-shadow:0 0 20px gold; }
