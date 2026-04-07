@@ -7,8 +7,6 @@
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 </head>
 
 <body>
@@ -26,10 +24,10 @@
   </div>
 </div>
 
-<!-- 🎮 3D ROBLOX AVATAR 360° -->
+<!-- ROBLOX AVATAR (Real 3D from Roblox API) -->
 <div class="avatar-box">
   <div id="avatarContainer">
-    <div id="loadingAvatar" class="loading-text">Loading 3D Avatar...</div>
+    <canvas id="avatar3D"></canvas>
   </div>
 </div>
 
@@ -83,6 +81,9 @@
 </div>
 </div>
 
+<!-- Three.js CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js"></script>
 <script src="script.js"></script>
 </body>
 </html>
