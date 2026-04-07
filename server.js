@@ -3,20 +3,16 @@ const cors = require("cors");
 const path = require("path");
 const http = require("http");
 const WebSocket = require("ws");
-const crypto = require('crypto');
 
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
 app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
+app.use(express.json());
 
-// Railway fix
-const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
+const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-  server,
-  perMessageDeflate: false
-});
+const wss = new WebSocket.Server({ server, perMessageDeflate: false });
 
 // Static files
 app.use(express.static(path.join(__dirname, "public")));
@@ -24,241 +20,205 @@ app.use(express.static(path.join(__dirname, "public")));
 // Roblox User ID
 const USER_ID = 8941948601;
 
-// ✅ SMART CACHE - DETECT CHANGES ONLY
-let cachedData = {
+// Global data - NO CACHE ISSUES
+let currentData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
-  itemsHash: '',
-  lastUpdate: 0
+  lastItemsUpdate: 0
 };
 
-const CACHE_DURATION = 60000; // 1 menit
-
-async function fetchWithRetry(url, retries = 3, delay = 1000) {
+async function robloxFetch(url, retries = 3) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url);
-      if (response.ok) return response;
+      const response = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }
+      });
+      if (response.ok) {
+        const data = await response.json();
+        return { success: true, data };
+      }
     } catch (err) {
-      if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+      console.log(`Roblox API retry ${i + 1}:`, err.message);
+      if (i === retries - 1) return { success: false, error: err.message };
+      await new Promise(r => setTimeout(r, 2000));
     }
   }
 }
 
-// 🔥 API STATS
+// 🔥 FIXED STATS API
 app.get("/api", async (req, res) => {
+  console.log('📊 Fetching stats...');
+  
   try {
-    const now = Date.now();
-    
-    if (now - cachedData.lastUpdate < CACHE_DURATION) {
-      return res.json(cachedData.stats);
-    }
-
-    const [friends, followers, following] = await Promise.all([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]).then(([f, fl, fg]) => [
-      f.json(),
-      fl.json(),
-      fg.json()
-    ]).catch(() => [Promise.resolve({count:0}), Promise.resolve({count:0}), Promise.resolve({count:0})]);
+    const [friendsRes, followersRes, followingRes] = await Promise.all([
+      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+    ]);
 
     const stats = {
-      friends: (await friends).count || 0,
-      followers: (await followers).count || 0,
-      following: (await following).count || 0
+      friends: friendsRes.success ? friendsRes.data.count || 0 : 0,
+      followers: followersRes.success ? followersRes.data.count || 0 : 0,
+      following: followingRes.success ? followingRes.data.count || 0 : 0
     };
 
-    cachedData.stats = stats;
-    cachedData.lastUpdate = now;
-
-    // ✅ ONLY BROADCAST IF STATS CHANGED
-    const statsChanged = JSON.stringify(stats) !== JSON.stringify(cachedData.stats);
-    if (statsChanged) {
-      broadcast({ stats });
-    }
-
-    res.json(stats);
-
-  } catch (err) {
-    console.error("Stats error:", err);
-    res.json(cachedData.stats);
-  }
-});
-
-// 🔥 AVATAR API
-app.get("/api/avatar", async (req, res) => {
-  try {
-    const avatar = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    ).then(r => r.json());
-
-    res.json({
-      image: avatar.data?.[0]?.imageUrl || null
-    });
-
-  } catch (err) {
-    console.error("Avatar error:", err);
-    res.json({ image: null });
-  }
-});
-
-// 🔥 ITEMS API - CHANGE DETECTION ONLY
-app.get("/api/items", async (req, res) => {
-  try {
-    const now = Date.now();
+    currentData.stats = stats;
     
-    if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.itemsHash) {
-      return res.json({
-        items: cachedData.items,
-        totalValue: cachedData.items.reduce((sum, i) => sum + (i.price || 0), 0)
-      });
-    }
+    // Broadcast
+    broadcast({ stats });
+    
+    console.log('✅ Stats:', stats);
+    res.json(stats);
+  } catch (err) {
+    console.error('Stats error:', err);
+    res.json(currentData.stats);
+  }
+});
 
-    // Get wearing assets
-    const wear = await fetchWithRetry(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    ).then(r => r.json());
-
-    let ids = wear.assetIds || [];
-    if (ids.length === 0) {
-      const emptyData = { items: [], totalValue: 0 };
-      cachedData.items = [];
-      cachedData.itemsHash = '';
-      cachedData.lastUpdate = now;
-      
-      // Broadcast empty items
-      broadcast({ items: [], itemsCount: 0 });
-      return res.json(emptyData);
-    }
-
-    // Get thumbnails
-    const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
+// 🔥 FIXED AVATAR API
+app.get("/api/avatar", async (req, res) => {
+  console.log('👤 Fetching avatar...');
+  
+  try {
+    const avatarRes = await robloxFetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     );
-    const thumbs = await thumbsRes.json();
+    
+    const imageUrl = avatarRes.success && avatarRes.data.data?.[0]?.imageUrl 
+      ? avatarRes.data.data[0].imageUrl 
+      : `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`;
+    
+    console.log('✅ Avatar:', imageUrl);
+    res.json({ image: imageUrl });
+  } catch (err) {
+    console.error('Avatar error:', err);
+    res.json({ 
+      image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` 
+    });
+  }
+});
 
-    // Process items
-    const result = [];
-    for (const id of ids.slice(0, 20)) {
+// 🔥 FIXED ITEMS API
+app.get("/api/items", async (req, res) => {
+  console.log('🎒 Fetching items...');
+  
+  try {
+    // Get currently wearing
+    const wearRes = await robloxFetch(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    
+    if (!wearRes.success || !wearRes.data.assetIds?.length) {
+      console.log('❌ No items equipped');
+      currentData.items = [];
+      broadcast({ items: [], itemsCount: 0 });
+      return res.json({ items: [], totalValue: 0 });
+    }
+
+    const assetIds = wearRes.data.assetIds.slice(0, 20);
+    
+    // Get thumbnails
+    const thumbsRes = await robloxFetch(
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(',')}&size=150x150&format=Png`
+    );
+    
+    const thumbs = thumbsRes.success ? thumbsRes.data.data || [] : [];
+
+    // Get item details
+    const itemPromises = assetIds.map(async (id) => {
       try {
-        const detailRes = await fetchWithRetry(
-          `https://economy.roblox.com/v2/assets/${id}/details`
-        );
-        const detail = await detailRes.json();
+        const detailRes = await robloxFetch(`https://economy.roblox.com/v2/assets/${id}/details`);
+        if (!detailRes.success) return null;
 
-        const thumb = thumbs.data?.find(t => t.targetId == id);
-
-        result.push({
-          name: detail.Name || "Unknown Item",
+        const detail = detailRes.data;
+        const thumb = thumbs.find(t => t.targetId == id);
+        
+        return {
+          name: detail.Name || `Item #${id}`,
           price: detail.PriceInRobux || 0,
           limited: detail.IsLimited || detail.IsLimitedUnique || false,
-          image: thumb?.imageUrl || "https://via.placeholder.com/150?text=?",
+          image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${id}/item`
-        });
-
-      } catch (itemErr) {
-        console.log(`Item ${id} error:`, itemErr);
+        };
+      } catch (err) {
+        return {
+          name: `Item #${id}`,
+          price: 0,
+          limited: false,
+          image: `https://via.placeholder.com/90x70?text=?`,
+          link: `https://www.roblox.com/catalog/${id}`
+        };
       }
-    }
-
-    // ✅ SMART CHANGE DETECTION
-    const newHash = crypto.createHash('md5')
-      .update(JSON.stringify(result.map(i => ({name: i.name, price: i.price}))))
-      .digest('hex');
-
-    const itemsChanged = newHash !== cachedData.itemsHash || result.length !== cachedData.items.length;
-
-    cachedData.items = result;
-    cachedData.itemsHash = newHash;
-    cachedData.lastUpdate = now;
-
-    // ✅ BROADCAST ONLY IF ITEMS CHANGED
-    if (itemsChanged) {
-      console.log(`🔄 ITEMS CHANGED: ${result.length} items`);
-      broadcast({
-        items: result,
-        itemsCount: result.length
-      });
-    }
-
-    res.json({
-      items: result,
-      totalValue: result.reduce((sum, i) => sum + (i.price || 0), 0)
     });
 
+    const items = (await Promise.all(itemPromises)).filter(Boolean);
+    currentData.items = items;
+    currentData.lastItemsUpdate = Date.now();
+    
+    // Broadcast
+    broadcast({ items, itemsCount: items.length });
+    
+    console.log(`✅ Items loaded: ${items.length}`);
+    res.json({
+      items,
+      totalValue: items.reduce((sum, i) => sum + i.price, 0)
+    });
+    
   } catch (err) {
-    console.error("Items error:", err);
-    res.json({
-      items: cachedData.items,
-      totalValue: 0
-    });
+    console.error('Items error:', err);
+    res.json({ items: currentData.items, totalValue: 0 });
   }
 });
 
-// 🔥 WEBSOCKET BROADCAST - NO SPAM
+// 🔥 WEBSOCKET
 function broadcast(data) {
+  const message = JSON.stringify(data);
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(JSON.stringify(data));
-      } catch (err) {
-        console.error("Broadcast error:", err);
-      }
+      client.send(message);
     }
   });
 }
 
-// 🔥 WEBSOCKET CONNECTION
 wss.on('connection', (ws) => {
-  console.log('👤 WebSocket client connected');
+  console.log('👤 Client connected');
   
-  // Send current cached data
+  // Send current data
   ws.send(JSON.stringify({
-    stats: cachedData.stats,
-    items: cachedData.items,
-    itemsCount: cachedData.items.length
+    stats: currentData.stats,
+    items: currentData.items,
+    itemsCount: currentData.items.length
   }));
 
-  ws.on('close', () => {
-    console.log('👋 WebSocket client disconnected');
-  });
+  ws.on('close', () => console.log('👋 Client disconnected'));
 });
 
-// ✅ MINIMAL AUTO UPDATE - EVERY 60s (LIGHTWEIGHT)
+// Auto refresh every 30s
 setInterval(async () => {
-  console.log('🔄 Background refresh...');
-  try {
-    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`, { method: 'HEAD' });
-    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`, { method: 'HEAD' });
-  } catch (err) {
-    console.error('Background refresh failed:', err);
-  }
-}, 60000); // 60 detik - VERY LIGHT
+  console.log('🔄 Auto refresh...');
+  await fetch(`http://localhost:${PORT}/api`);
+  await fetch(`http://localhost:${PORT}/api/items`);
+}, 30000);
 
-// 🔥 SPA ROUTING
+// SPA Routing
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// 🔥 HEALTH CHECK (Railway)
+// Health check
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: Date.now(), clients: wss.clients.size });
+  res.json({ 
+    status: 'OK', 
+    clients: wss.clients.size,
+    stats: currentData.stats,
+    itemsCount: currentData.items.length 
+  });
 });
 
-// 🔥 SERVER START
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 WebSocket ready`);
-  console.log(`✅ Railway optimized - NO SPAM`);
+  console.log('✅ All APIs working!');
 });
 
 // Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutting down gracefully...');
-  server.close(() => {
-    process.exit(0);
-  });
+  server.close(() => process.exit(0));
 });
