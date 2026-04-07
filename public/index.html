@@ -7,11 +7,73 @@
 <link rel="stylesheet" href="style.css">
 <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700&display=swap" rel="stylesheet">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" rel="stylesheet">
+
+<style>
+.center-text {
+  text-align: center;
+  margin-top: 10px;
+}
+
+/* BUTTON USERNAME */
+.copy-btn {
+  margin-top: 10px;
+  padding: 12px 18px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 10px;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  display: inline-block;
+}
+
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
+}
+
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+.copy-btn.copied {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #000;
+  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
+}
+
+/* USERNAME INPUT (Hidden by default) */
+.username-input {
+  position: fixed;
+  top: 10px;
+  right: 10px;
+  z-index: 1000;
+  display: none;
+}
+
+.username-input.show {
+  display: block;
+  animation: slideIn 0.3s ease;
+}
+
+@keyframes slideIn {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+</style>
 </head>
 
 <body>
 <div class="bg"></div>
 <div class="scanline"></div>
+
+<!-- USERNAME INPUT (Toggle dengan Ctrl+U) -->
+<div class="username-input" id="usernameInputContainer">
+  <input type="text" id="usernameInput" placeholder="Roblox Username → Enter" style="padding:8px;border:1px solid #0ff;border-radius:5px;background:rgba(0,0,0,0.8);color:#0ff;width:200px;font-family:Orbitron;" />
+</div>
 
 <div class="container">
 <div class="card">
@@ -24,38 +86,32 @@
   </div>
 </div>
 
-<!-- USERNAME INPUT -->
-<div class="username-input">
-  <input type="text" id="usernameInput" placeholder="Masukkan Roblox Username" />
-  <button id="searchBtn" class="copy-btn">
-    <i class="fas fa-search"></i> Search
+<!-- AVATAR 3D -->
+<div class="avatar-box" style="position:relative;">
+  <canvas id="avatarCanvas" style="position:absolute;top:0;left:0;width:100%;height:100%;display:none;border-radius:12px;"></canvas>
+  <img id="avatar" src="https://i.ibb.co.com/hFPZKf8P/1775477390710-Picsart-Background-Remover.png">
+</div>
+
+<!-- BUTTON USERNAME -->
+<div class="center-text">
+  <button class="copy-btn" id="copyBtn" onclick="copyUsername()">
+    <i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4
   </button>
 </div>
 
-<!-- AVATAR 3D -->
-<div class="avatar-3d-container">
-  <canvas id="avatarCanvas"></canvas>
-  <div id="avatarFallback" class="avatar-box">
-    <img id="avatar" src="https://i.ibb.co.com/hFPZKf8P/1775477390710-Picsart-Background-Remover.png">
-  </div>
-</div>
-
-<!-- STATS -->
+<!-- STATS (Tambah Total Value) -->
 <div class="stats">
   <div class="stat"><h2 id="friends">0</h2><span>Koneksi</span></div>
   <div class="stat"><h2 id="followers">0</h2><span>Pengikut</span></div>
   <div class="stat"><h2 id="following">0</h2><span>Mengikuti</span></div>
-  <div class="stat"><h2 id="totalValue">$0</h2><span>Total Value</span></div>
+  <div class="stat" style="display:none;" id="totalValueStat"><h2 id="totalValue">$0</h2><span>Value</span></div>
 </div>
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
-  <h3 class="items-title">
-    MY ROBLOX ITEMS 
-    <span id="totalItems">0</span>
-  </h3>
+  <h3 class="items-title">MY ROBLOX ITEMS <span id="liveIndicator" style="font-size:10px;color:lime;">● LIVE</span></h3>
   <div class="items-container" id="itemsContainer"></div>
 </div>
   
@@ -87,7 +143,7 @@
 </div>
 </div>
 
-<!-- THREE.JS CDN -->
+<!-- THREE.JS -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="script.js"></script>
 </body>
