@@ -90,7 +90,6 @@ document.querySelectorAll(".icons a").forEach(icon=>{
 });
 
 // 🔥 AVATAR INTERAKTIF (FOLLOW MOUSE)
-const avatar = document.getElementById("avatar");
 
 if(avatar){
   document.addEventListener("mousemove", (e)=>{
@@ -121,6 +120,13 @@ function getRarity(price){
   return "normal";
 }
 
+function getRarity(price){
+  if(price > 10000) return "legendary";
+  if(price > 5000) return "epic";
+  if(price > 1000) return "rare";
+  return "";
+}
+
 function createCard(item, index){
   const rarity = getRarity(item.price);
 
@@ -138,6 +144,15 @@ function createCard(item, index){
   div.onclick = ()=> window.open(item.link);
 
   return div;
+}
+
+function renderItems(items){
+  const container = document.getElementById("itemsContainer");
+  container.innerHTML = "";
+
+  items.slice(0,20).forEach((item,i)=>{
+    container.appendChild(createCard(item,i));
+  });
 }
 
 async function loadItems(){
@@ -176,3 +191,28 @@ async function loadItems(){
     container.innerHTML = "<p style='font-size:11px'>Gagal load item</p>";
   }
 }
+
+// ======================
+// 🔴 WEBSOCKET LIVE UPDATE
+// ======================
+
+const ws = new WebSocket(location.origin.replace("http","ws"));
+
+ws.onmessage = (msg)=>{
+  try{
+    const data = JSON.parse(msg.data);
+
+    if(data.type === "stats"){
+      animate(document.getElementById("friends"), data.data.friends);
+      animate(document.getElementById("followers"), data.data.followers);
+      animate(document.getElementById("following"), data.data.following);
+    }
+
+    if(data.type === "items"){
+      renderItems(data.data);
+    }
+
+  }catch(e){
+    console.log("WS ERROR", e);
+  }
+};
