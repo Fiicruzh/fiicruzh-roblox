@@ -358,3 +358,40 @@ body{
 .item-card.rare{
   box-shadow:0 0 15px cyan;
 }
+
+/* ===================== */
+/* TOTAL PRICE */
+/* ===================== */
+.total-price{
+  text-align:center;
+  margin-top:8px;
+  font-size:12px;
+  color:gold;
+}
+
+/* SMOOTH SKELETON */
+.skeleton{
+  min-width:90px;
+  height:90px;
+  border-radius:10px;
+  background:linear-gradient(90deg,#111,#222,#111);
+  background-size:200% 100%;
+  animation:loading 1.2s infinite linear;
+}
+
+/* RARITY UPGRADE */
+.item-card.legendary{
+  box-shadow:0 0 20px gold, 0 0 40px orange;
+}
+
+.item-card.epic{
+  box-shadow:0 0 20px violet, 0 0 40px purple;
+}
+
+.item-card.rare{
+  box-shadow:0 0 20px cyan, 0 0 40px blue;
+}
+
+.item-card.normal{
+  box-shadow:0 0 10px #333;
+}
