@@ -35,11 +35,18 @@ let cachedData = {
 
 const CACHE_DURATION = 30000;
 
-// 🔥 SMART FETCH WITH RETRY
+// 🔥 SAFE FETCH WITH RETRY & ERROR HANDLING
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
       if (response.ok) return response;
     } catch (err) {
       if (i === retries - 1) throw err;
@@ -48,7 +55,7 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   }
 }
 
-// 🔥 API STATS (CACHED)
+// 🔥 API STATS (SAFE)
 app.get("/api", async (req, res) => {
   try {
     const now = Date.now();
@@ -57,20 +64,23 @@ app.get("/api", async (req, res) => {
       return res.json(cachedData.stats);
     }
 
+    const requests = [
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).catch(() => ({json: () => Promise.resolve({count: 0})})),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).catch(() => ({json: () => Promise.resolve({count: 0})})),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).catch(() => ({json: () => Promise.resolve({count: 0})}))
+    ];
+
+    const [friendsRes, followersRes, followingRes] = await Promise.all(requests);
     const [friends, followers, following] = await Promise.all([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]).then(([f, fl, fg]) => [
-      f.json(),
-      fl.json(),
-      fg.json()
-    ]).catch(() => [Promise.resolve({count:0}), Promise.resolve({count:0}), Promise.resolve({count:0})]);
+      friendsRes.json(),
+      followersRes.json(),
+      followingRes.json()
+    ]);
 
     const stats = {
-      friends: (await friends).count || 0,
-      followers: (await followers).count || 0,
-      following: (await following).count || 0
+      friends: friends.count || 0,
+      followers: followers.count || 0,
+      following: following.count || 0
     };
 
     cachedData.stats = stats;
@@ -80,35 +90,40 @@ app.get("/api", async (req, res) => {
     res.json(stats);
 
   } catch (err) {
-    console.error("Stats error:", err);
+    console.error("Stats error:", err.message);
     res.json(cachedData.stats);
   }
 });
 
-// 🔥 2D ROBLOX AVATAR API
+// 🔥 2D ROBLOX AVATAR API (SAFE)
 app.get("/api/avatar2d", async (req, res) => {
   try {
-    const avatar = await fetchWithRetry(
+    const avatarRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    ).then(r => r.json());
-
+    ).catch(() => null);
+    
+    if (!avatarRes) {
+      return res.json({ image: null });
+    }
+    
+    const avatar = await avatarRes.json();
     res.json({
       image: avatar.data?.[0]?.imageUrl || null
     });
 
   } catch (err) {
-    console.error("Avatar error:", err);
+    console.error("Avatar error:", err.message);
     res.json({ image: null });
   }
 });
 
-// 🔥 SMART ITEMS - HASH + CHANGE DETECTION ✅ NO CONSTANT REFRESH
+// 🔥 SMART ITEMS - FULLY SAFE ✅ FIXED ERROR
 app.get("/api/items", async (req, res) => {
   const checkOnly = req.query.checkOnly === 'true';
   const now = Date.now();
   
   try {
-    // QUICK CHECK - Return cached if fresh
+    // QUICK CACHE CHECK
     if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.itemsHash) {
       return res.json({
         items: checkOnly ? [] : cachedData.items,
@@ -117,14 +132,21 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // Get currently wearing
-    const wear = await fetchWithRetry(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    ).then(r => r.json());
+    // SAFE Wear API call
+    let wear;
+    try {
+      const wearRes = await fetchWithRetry(
+        `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+      );
+      wear = await wearRes.json();
+    } catch (wearErr) {
+      console.error("Wear API failed:", wearErr.message);
+      wear = { assetIds: [] };
+    }
 
     const assetIds = wear.assetIds || [];
     
-    // FAST CHECK - Empty inventory
+    // EMPTY INVENTORY CHECK
     if (assetIds.length === 0) {
       const emptyHash = crypto.createHash('md5').update('[]').digest('hex').slice(0, 16);
       if (cachedData.itemsHash !== emptyHash) {
@@ -137,7 +159,7 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: [], itemsHash: emptyHash, totalValue: 0 });
     }
 
-    // ✅ CHANGE DETECTION - Fingerprint check
+    // FINGERPRINT CHECK
     const fingerprint = assetIds.slice(0, 10).sort().join(',');
     if (fingerprint === cachedData.lastItemsFingerprint && !checkOnly) {
       return res.json({
@@ -147,13 +169,18 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // Get thumbnails
-    const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(",")}&size=150x150&format=Png`
-    );
-    const thumbs = await thumbsRes.json();
+    // SAFE Thumbnails
+    let thumbs = { data: [] };
+    try {
+      const thumbsRes = await fetchWithRetry(
+        `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(",")}&size=150x150&format=Png`
+      );
+      thumbs = await thumbsRes.json();
+    } catch (thumbsErr) {
+      console.error("Thumbs failed:", thumbsErr.message);
+    }
 
-    // Process items
+    // PROCESS ITEMS SAFELY
     const result = [];
     let totalValue = 0;
 
@@ -177,15 +204,16 @@ app.get("/api/items", async (req, res) => {
         result.push(item);
 
       } catch (itemErr) {
-        console.log(`Item ${id} error:`, itemErr);
+        console.log(`Item ${id} skipped:`, itemErr.message);
+        // Skip failed items, don't crash
       }
     }
 
-    // ✅ CREATE UNIQUE HASH
+    // CREATE HASH
     const itemsData = JSON.stringify(result.sort((a,b) => b.price - a.price));
     const newHash = crypto.createHash('md5').update(itemsData).digest('hex').slice(0, 16);
 
-    // ✅ ONLY UPDATE IF CHANGED
+    // UPDATE ONLY IF CHANGED
     if (newHash !== cachedData.itemsHash) {
       cachedData.items = result;
       cachedData.itemsHash = newHash;
@@ -193,13 +221,12 @@ app.get("/api/items", async (req, res) => {
       cachedData.lastItemsFingerprint = fingerprint;
       cachedData.lastUpdate = now;
 
-      // Broadcast ONLY when changed
       broadcast({
         items: result,
         itemsHash: newHash,
         totalValue: totalValue
       });
-      console.log('🔄 ITEMS UPDATED - New hash:', newHash);
+      console.log(`🔄 ITEMS CHANGED! New: ${result.length} items, Hash: ${newHash}`);
     }
 
     res.json({
@@ -209,8 +236,8 @@ app.get("/api/items", async (req, res) => {
     });
 
   } catch (err) {
-    console.error("Items error:", err);
-    res.json({
+    console.error("Items error:", err.message);
+    res.status(200).json({  // Always return 200 with cache
       items: cachedData.items,
       itemsHash: cachedData.itemsHash,
       totalValue: cachedData.totalValue
@@ -225,7 +252,7 @@ function broadcast(data) {
       try {
         client.send(JSON.stringify(data));
       } catch (err) {
-        console.error("Broadcast error:", err);
+        console.error("Broadcast error:", err.message);
       }
     }
   });
@@ -235,7 +262,6 @@ function broadcast(data) {
 wss.on('connection', (ws) => {
   console.log('👤 WebSocket client connected');
   
-  // Send current cached data
   ws.send(JSON.stringify({
     stats: cachedData.stats,
     items: cachedData.items,
@@ -246,23 +272,37 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     console.log('👋 WebSocket client disconnected');
   });
+  
+  ws.on('error', (err) => {
+    console.error('WS error:', err.message);
+  });
 });
 
-// 🔥 SMART AUTO UPDATE - 60s interval, only when needed
+// 🔥 FIXED SMART AUTO UPDATE - NO LOCALHOST CALLS
 setInterval(async () => {
-  console.log('🔄 SMART CHECK: Checking for updates...');
+  console.log('🔄 SMART CHECK: Background update...');
   try {
-    // Check stats every 60s
-    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`);
+    // Update stats
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api')?.handle?.call(app, {
+      url: '/api',
+      query: { _t: Date.now() }
+    }, {
+      json: data => cachedData.stats = data
+    });
     
-    // Smart items check - lightweight
-    await fetch(`http://localhost:${PORT}/api/items?checkOnly=true&_t=${Date.now()}`);
+    // Lightweight items check
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api/items')?.handle?.call(app, {
+      url: '/api/items',
+      query: { checkOnly: true, _t: Date.now() }
+    }, {
+      json: () => {}
+    });
     
-    console.log('✅ SMART CHECK: Complete');
+    console.log('✅ Background check complete');
   } catch (err) {
-    console.error('Smart check failed:', err);
+    console.error('Background check failed:', err.message);
   }
-}, 60000); // 60 seconds - MUCH BETTER
+}, 60000);
 
 // 🔥 SPA ROUTING
 app.get("*", (req, res) => {
@@ -275,16 +315,18 @@ app.get('/health', (req, res) => {
     status: 'OK', 
     timestamp: Date.now(),
     itemsHash: cachedData.itemsHash,
-    clients: wss.clients.size 
+    itemsCount: cachedData.items.length,
+    clients: wss.clients.size,
+    uptime: process.uptime()
   });
 });
 
 // 🔥 SERVER START
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 WebSocket: ws://${process.env.RAILWAY_STATIC_URL || 'localhost'}:${PORT}/websocket`);
-  console.log('✅ Portfolio ready! 🚀');
-  console.log('🧠 SMART MODE: Items only refresh when CHANGED');
+  console.log(`📡 WebSocket ready`);
+  console.log('✅ FIXED: No more JSON errors!');
+  console.log('🧠 SMART MODE: Items update only on CHANGE');
 });
 
 // Graceful shutdown
@@ -293,4 +335,9 @@ process.on('SIGTERM', () => {
   server.close(() => {
     process.exit(0);
   });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err.message);
+  process.exit(1);
 });
