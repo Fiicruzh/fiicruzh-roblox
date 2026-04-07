@@ -1,141 +1,111 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.avatarCtx = null;
-    this.avatarImg = null;
-    this.isDragging = false;
-    this.lastX = 0;
-    this.lastY = 0;
-    this.rotationX = 0;
-    this.rotationY = 0;
-    this.targetRotationX = 0;
-    this.targetRotationY = 0;
+    this.lastData = { stats: {}, items: [] };
     this.retryCount = 0;
     this.init();
   }
 
   init() {
-    this.setupCanvas();
-    this.loadAvatar3D();
+    this.initThreeJS();
     this.connectWebSocket();
     this.loadStats();
     this.loadItems();
     this.addInteractions();
   }
 
-  setupCanvas() {
-    const canvas = document.getElementById('avatar3D');
-    this.avatarCtx = canvas.getContext('2d');
+  // 🎮 THREE.JS 3D AVATAR
+  initThreeJS() {
+    const container = document.getElementById('avatarContainer');
     
-    // Drag events
-    canvas.addEventListener('mousedown', (e) => this.startDrag(e));
-    canvas.addEventListener('mousemove', (e) => this.drag(e));
-    canvas.addEventListener('mouseup', () => this.stopDrag());
-    canvas.addEventListener('mouseleave', () => this.stopDrag());
+    // Scene
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x000011);
     
-    // Touch support
-    canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
-    canvas.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
-    canvas.addEventListener('touchend', () => this.stopDrag());
-  }
-
-  startDrag(e) {
-    this.isDragging = true;
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
-    document.body.style.cursor = 'grabbing';
-  }
-
-  drag(e) {
-    if (!this.isDragging) return;
+    // Camera
+    const camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    camera.position.z = 3;
     
-    const deltaX = e.clientX - this.lastX;
-    const deltaY = e.clientY - this.lastY;
+    // Renderer
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setSize(180, 180);
+    renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(renderer.domElement);
     
-    this.targetRotationY += deltaX * 0.5;
-    this.targetRotationX -= deltaY * 0.5;
+    // Avatar texture
+    this.loadAvatarTexture(scene, renderer, camera);
     
-    this.lastX = e.clientX;
-    this.lastY = e.clientY;
-  }
-
-  stopDrag() {
-    this.isDragging = false;
-    document.body.style.cursor = 'grab';
-  }
-
-  // 🔥 3D AVATAR 360° RENDER
-  async loadAvatar3D() {
-    try {
-      const res = await this.fetchWithRetry('/api/avatar');
-      const data = await res.json();
-      this.avatarImg = new Image();
-      this.avatarImg.crossOrigin = 'anonymous';
-      this.avatarImg.onload = () => this.animate3D();
-      this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
-    } catch (err) {
-      console.error('Avatar load failed:', err);
-      this.avatarImg = new Image();
-      this.avatarImg.src = 'https://via.placeholder.com/200?text=ROBLOX';
-      this.animate3D();
+    // Auto rotation
+    let rotationY = 0;
+    function animate() {
+      requestAnimationFrame(animate);
+      rotationY += 0.008;
+      scene.rotation.y = rotationY;
+      renderer.render(scene, camera);
     }
+    animate();
+
+    // Responsive
+    window.addEventListener('resize', () => {
+      camera.aspect = 1;
+      camera.updateProjectionMatrix();
+      renderer.setSize(180, 180);
+    });
   }
 
-  animate3D() {
-    const canvas = document.getElementById('avatar3D');
-    
-    function render() {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Smooth rotation
-      app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
-      app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
-      
-      // Auto rotate when not dragging
-      if (!app.isDragging) {
-        app.targetRotationY += 0.3;
-      }
-      
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      
-      // 3D transformations
-      ctx.rotate(app.rotationY * 0.01);
-      ctx.scale(1.1, 0.95);
-      
-      // Lighting effect
-      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
-      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
-      gradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-90, -90, 180, 180);
-      
-      // Shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 10;
-      ctx.shadowOffsetY = 10;
-      
-      // Draw avatar
-      if (app.avatarImg.complete) {
-        ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
-      }
-      
-      ctx.restore();
-      requestAnimationFrame(render);
-    }
-    render();
+  loadAvatarTexture(scene, renderer, camera) {
+    fetch('/api/avatar')
+      .then(res => res.json())
+      .then(data => {
+        if (data.image) {
+          const texture = new THREE.TextureLoader().load(data.image);
+          const geometry = new THREE.SphereGeometry(1, 32, 32);
+          const material = new THREE.MeshPhongMaterial({ 
+            map: texture,
+            shininess: 100
+          });
+          const sphere = new THREE.Mesh(geometry, material);
+          sphere.scale.x = 1.2;
+          scene.add(sphere);
+
+          // Lighting
+          const light = new THREE.DirectionalLight(0xffffff, 1);
+          light.position.set(1, 1, 1);
+          scene.add(light);
+          scene.add(new THREE.AmbientLight(0x404040));
+        } else {
+          this.createFallbackAvatar(scene);
+        }
+      })
+      .catch(() => {
+        this.createFallbackAvatar(scene);
+      });
   }
 
-  // 🔥 WEBSOCKET REAL-TIME UPDATE
+  createFallbackAvatar(scene) {
+    const geometry = new THREE.SphereGeometry(1, 32, 32);
+    const material = new THREE.MeshPhongMaterial({ 
+      color: 0x00ffff,
+      shininess: 100,
+      emissive: 0x002222
+    });
+    const sphere = new THREE.Mesh(geometry, material);
+    sphere.scale.x = 1.2;
+    scene.add(sphere);
+
+    const light = new THREE.DirectionalLight(0xffffff, 1);
+    light.position.set(1, 1, 1);
+    scene.add(light);
+    scene.add(new THREE.AmbientLight(0x404040));
+  }
+
+  // 🔥 WEBSOCKET - UPDATE ONLY IF CHANGED
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ LIVE: WebSocket connected');
+      console.log('✅ WebSocket connected');
       document.getElementById('liveIndicator').textContent = '🟢';
       this.retryCount = 0;
     };
@@ -143,14 +113,14 @@ class PortfolioApp {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        this.updateLiveData(data);
+        this.updateIfChanged(data);
       } catch (err) {
         console.error('WS parse error:', err);
       }
     };
 
     this.ws.onclose = () => {
-      console.log('❌ LIVE: WebSocket disconnected');
+      console.log('❌ WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
       this.smartReconnect();
     };
@@ -161,24 +131,40 @@ class PortfolioApp {
       setTimeout(() => {
         this.retryCount++;
         this.connectWebSocket();
-      }, 2000 * this.retryCount);
+      }, 2000 * Math.pow(1.5, this.retryCount));
     }
   }
 
-  updateLiveData(data) {
-    if (data.stats) {
-      this.animate(document.getElementById("friends"), data.stats.friends);
-      this.animate(document.getElementById("followers"), data.stats.followers);
-      this.animate(document.getElementById("following"), data.following);
+  // ✅ UPDATE ONLY IF CHANGED - NO SPAM
+  updateIfChanged(newData) {
+    let hasChanges = false;
+
+    // Check stats changes
+    if (newData.stats) {
+      const statsChanged = 
+        newData.stats.friends !== this.lastData.stats.friends ||
+        newData.stats.followers !== this.lastData.stats.followers ||
+        newData.stats.following !== this.lastData.stats.following;
+      
+      if (statsChanged) {
+        this.animate(document.getElementById("friends"), newData.stats.friends);
+        this.animate(document.getElementById("followers"), newData.stats.followers);
+        this.animate(document.getElementById("following"), newData.stats.following);
+        hasChanges = true;
+      }
+      this.lastData.stats = newData.stats;
     }
-    
-    if (data.items) {
-      this.renderItems(data.items);
-      document.getElementById("totalValue").textContent = 
-        `${data.totalValue?.toLocaleString() || 0} R$`;
+
+    // Check items changes
+    if (newData.items && JSON.stringify(newData.items) !== JSON.stringify(this.lastData.items)) {
+      this.renderItems(newData.items);
+      hasChanges = true;
+      this.lastData.items = newData.items;
     }
-    
-    document.getElementById('liveIndicator').textContent = '🟢';
+
+    if (hasChanges) {
+      document.getElementById('liveIndicator').textContent = '🟢';
+    }
   }
 
   async fetchWithRetry(url, retries = 3) {
@@ -203,6 +189,7 @@ class PortfolioApp {
       this.animate(document.getElementById("friends"), data.friends || 0);
       this.animate(document.getElementById("followers"), data.followers || 0);
       this.animate(document.getElementById("following"), data.following || 0);
+      this.lastData.stats = data;
     } catch (err) {
       console.error('Stats failed:', err);
     }
@@ -218,11 +205,10 @@ class PortfolioApp {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
       this.renderItems(data.items || []);
-      document.getElementById("totalValue").textContent = 
-        `${(data.totalValue || 0).toLocaleString()} R$`;
+      this.lastData.items = data.items || [];
     } catch (err) {
       console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Loading...</div>';
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading...</div>';
     }
   }
 
@@ -246,12 +232,11 @@ class PortfolioApp {
   createItemCard(item, index) {
     const rarity = this.getRarity(item.price);
     return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/111/0ff?text=?';this.onerror=null" loading="lazy">
         <div class="item-name">${item.name}</div>
-        <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
     `;
   }
@@ -259,7 +244,7 @@ class PortfolioApp {
   animate(el, end) {
     end = Number(end) || 0;
     let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 1000;
+    const duration = 800;
     let startTime = null;
 
     const step = (timestamp) => {
@@ -287,12 +272,6 @@ class PortfolioApp {
         }, 2000);
       });
     };
-
-    // Auto refresh every 30s
-    setInterval(() => {
-      this.loadItems();
-      this.loadStats();
-    }, 30000);
   }
 }
 
@@ -300,5 +279,4 @@ class PortfolioApp {
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
-  document.getElementById('avatar3D').style.cursor = 'grab';
 });
