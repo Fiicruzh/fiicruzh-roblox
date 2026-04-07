@@ -103,7 +103,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API (NO PRICE)
+// 🔥 ITEMS API (HANYA AKSESORIS & PAKAIAN)
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -112,25 +112,52 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
+    // 1. Get currently wearing
     const wearRes = await fetchWithRetry(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     );
     const wear = await wearRes.json();
 
-    let ids = wear.assetIds || [];
-    if (ids.length === 0) {
+    let allAssetIds = wear.assetIds || [];
+    
+    // 2. Filter hanya aksesoris & pakaian (exclude hat, hair, etc yang bukan equipped)
+    const validAssetTypes = [2, 4, 8, 11, 12]; // Shirt=11, Pants=12, T-Shirt=4, Body=2, Face=8
+    
+    const filteredIds = [];
+    
+    // 3. Get asset details untuk filter type
+    for (const id of allAssetIds.slice(0, 30)) { // Max 30 untuk safety
+      try {
+        const detailRes = await fetchWithRetry(
+          `https://economy.roblox.com/v2/assets/${id}/details`,
+          2, 500 // Less retry untuk speed
+        );
+        const detail = await detailRes.json();
+        
+        // ✅ HANYA aksesoris & pakaian yang equipped
+        if (validAssetTypes.includes(detail.AssetTypeId)) {
+          filteredIds.push(id);
+        }
+      } catch (itemErr) {
+        console.log(`Item ${id} skipped (not clothing/accessory)`);
+      }
+    }
+
+    if (filteredIds.length === 0) {
       cachedData.items = [];
       cachedData.lastUpdate = now;
       return res.json({ items: [] });
     }
 
+    // 4. Get thumbnails untuk filtered items
     const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${filteredIds.join(",")}&size=150x150&format=Png`
     );
     const thumbs = await thumbsRes.json();
 
+    // 5. Create final items (max 12 items)
     const result = [];
-    for (const id of ids.slice(0, 20)) {
+    for (const id of filteredIds.slice(0, 12)) {
       try {
         const detailRes = await fetchWithRetry(
           `https://economy.roblox.com/v2/assets/${id}/details`
@@ -140,16 +167,16 @@ app.get("/api/items", async (req, res) => {
         const thumb = thumbs.data?.find(t => t.targetId == id);
 
         result.push({
-          name: detail.Name || "Unknown Item",
-          image: thumb?.imageUrl || "https://via.placeholder.com/150?text=?",
+          name: detail.Name || "Equipped Item",
+          image: thumb?.imageUrl || "https://via.placeholder.com/150?text=ROBLOX",
           link: `https://www.roblox.com/catalog/${id}/item`
         });
 
       } catch (itemErr) {
-        console.log(`Item ${id} skipped`);
+        console.log(`Final item ${id} error`);
         result.push({
-          name: "Unknown",
-          image: "https://via.placeholder.com/150?text=ERR",
+          name: "Equipped Item",
+          image: "https://via.placeholder.com/150?text=ITEM",
           link: `https://www.roblox.com/catalog/${id}`
         });
       }
