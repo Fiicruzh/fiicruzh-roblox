@@ -18,7 +18,7 @@
 
 <!-- HEADER -->
 <div class="header">
-  <img class="profile" src="https://i.ibb.co.com/PXr3MG9/IMG-20260224-184119-293.webp">
+  <img class="profile" src="https://tr.rbxcdn.com/HEADSHOT-THUMBNAIL?userId=8941948601&width=420&height=420&format=png">
   <div class="name-box">
     <h1 class="glitch" data-text="FiiCruzh">FiiCruzh</h1>
   </div>
@@ -27,6 +27,7 @@
 <!-- 🔥 AVATAR REAL 3D ROBLOX -->
 <div class="avatar-box">
   <canvas id="avatar3D" width="200" height="200"></canvas>
+  <div id="avatarStatus" class="status">Loading avatar...</div>
 </div>
 
 <!-- BUTTON USERNAME -->
@@ -38,17 +39,19 @@
 
 <!-- STATS -->
 <div class="stats">
-  <div class="stat"><h2 id="friends">0</h2><span>Koneksi</span></div>
-  <div class="stat"><h2 id="followers">0</h2><span>Pengikut</span></div>
-  <div class="stat"><h2 id="following">0</h2><span>Mengikuti</span></div>
+  <div class="stat"><h2 id="friends">--</h2><span id="friendsLabel">Loading...</span></div>
+  <div class="stat"><h2 id="followers">--</h2><span id="followersLabel">Loading...</span></div>
+  <div class="stat"><h2 id="following">--</h2><span id="followingLabel">Loading...</span></div>
 </div>
 
 <h3 class="tagline">I HATE WOMAN ❤️‍🔥</h3>
 
 <!-- ROBLOX ITEMS -->
 <div class="items-section">
-  <h3 class="items-title">MY ROBLOX ITEMS <span id="liveIndicator">🔴</span></h3>
-  <div class="items-container" id="itemsContainer"></div>
+  <h3 class="items-title">MY ROBLOX ITEMS <span id="liveIndicator">⚪</span></h3>
+  <div class="items-container" id="itemsContainer">
+    <div class="loading-full">Loading items...</div>
+  </div>
 </div>
   
 <!-- SOCIAL -->
