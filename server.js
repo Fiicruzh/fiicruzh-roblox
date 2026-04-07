@@ -1,18 +1,24 @@
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const http = require("http");
+const WebSocket = require("ws");
 
-const fetch = (...args) => import("node-fetch").then(({default: fetch}) => fetch(...args));
+const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
 app.use(cors());
-app.use(express.static("public"));
+
+const server = http.createServer(app);
+const wss = new WebSocket.Server({ server });
+
+app.use(express.static(path.join(__dirname, "public")));
 
 const USER_ID = 8941948601;
 
-// =================
-// API STATS
-// =================
+// ==========================
+// 🔥 API STATS
+// ==========================
 app.get("/api", async (req,res)=>{
   try{
     const [friends, followers, following] = await Promise.all([
@@ -32,17 +38,17 @@ app.get("/api", async (req,res)=>{
   }
 });
 
-// =================
-// AVATAR
-// =================
+// ==========================
+// 🔥 AVATAR AUTO
+// ==========================
 app.get("/api/avatar", async (req,res)=>{
   try{
-    const data = await fetch(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png`
+    const avatar = await fetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     ).then(r=>r.json());
 
     res.json({
-      image: data.data?.[0]?.imageUrl
+      image: avatar.data?.[0]?.imageUrl
     });
 
   }catch{
@@ -50,21 +56,23 @@ app.get("/api/avatar", async (req,res)=>{
   }
 });
 
-// =================
-// ITEMS
-// =================
+// ==========================
+// 🔥 ITEMS (FIX + PRICE + LIMITED)
+// ==========================
 app.get("/api/items", async (req,res)=>{
   try{
     const wear = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     ).then(r=>r.json());
 
-    const ids = wear.assetIds || [];
+    let ids = wear.assetIds || [];
 
-    if(!ids.length) return res.json([]);
+    if(ids.length === 0){
+      return res.json([]);
+    }
 
     const thumbs = await fetch(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150`
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
     ).then(r=>r.json());
 
     const result = [];
@@ -75,30 +83,39 @@ app.get("/api/items", async (req,res)=>{
           `https://economy.roblox.com/v2/assets/${id}/details`
         ).then(r=>r.json());
 
-        const thumb = thumbs.data.find(t=>t.targetId===id);
+        const thumb = thumbs.data?.find(t => t.targetId === id);
 
         result.push({
-          name: detail.Name,
+          name: detail.Name || "Unknown",
           price: detail.PriceInRobux || 0,
-          limited: detail.IsLimited || detail.IsLimitedUnique,
-          image: thumb?.imageUrl,
+          limited: detail.IsLimited || detail.IsLimitedUnique || false,
+          image: thumb?.imageUrl || "https://via.placeholder.com/150",
           link: `https://www.roblox.com/catalog/${id}`
         });
 
-      }catch{}
+      }catch{
+        result.push({
+          name:"Unknown",
+          price:0,
+          limited:false,
+          image:"https://via.placeholder.com/150",
+          link:"#"
+        });
+      }
     }
 
     res.json(result);
 
-  }catch{
+  }catch(err){
+    console.log("ITEM ERROR:", err);
     res.json([]);
   }
 });
 
-// =================
+// ==========================
 app.get("*", (req,res)=>{
-  res.sendFile(path.join(__dirname,"public/index.html"));
+  res.sendFile(path.join(__dirname,"public","index.html"));
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, ()=>console.log("SERVER LIVE ⚡"));
+server.listen(PORT, ()=>console.log("SERVER LIVE ⚡"));
