@@ -107,19 +107,20 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* AVATAR 3D */
+/* AVATAR 3D ENHANCED */
 .avatar-box{
   text-align:center;
   margin-top:12px;
-  perspective: 1000px;
+  perspective: 1200px;
 }
 
 #avatar3D{
   width:180px;
   height:180px;
   border-radius:12px;
-  box-shadow:0 0 30px cyan;
+  box-shadow:0 0 30px cyan, inset 0 0 20px rgba(0,255,255,0.1);
   cursor: grab;
+  border: 2px solid rgba(0,255,255,0.3);
 }
 
 #avatar3D:active{
@@ -453,8 +454,6 @@ body{
   100%{left:100%;}
 }
 
-/* ... keep all previous CSS ... */
-
 /* 3D AVATAR ENHANCED */
 .drag-hint {
   font-size: 10px;
@@ -472,5 +471,3 @@ body{
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-
-/* ... rest of CSS stays same ... */
