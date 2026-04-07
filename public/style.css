@@ -107,23 +107,22 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* AVATAR 3D ENHANCED */
+/* 2D LIVE AVATAR */
 .avatar-box{
   text-align:center;
   margin-top:12px;
-  perspective: 1200px;
+  perspective: 1000px;
 }
 
-#avatar3D{
+#avatar2D{
   width:180px;
   height:180px;
   border-radius:12px;
-  box-shadow:0 0 30px cyan, inset 0 0 20px rgba(0,255,255,0.1);
+  box-shadow:0 0 30px cyan;
   cursor: grab;
-  border: 2px solid rgba(0,255,255,0.3);
 }
 
-#avatar3D:active{
+#avatar2D:active{
   cursor: grabbing;
 }
 
@@ -349,7 +348,7 @@ body{
   content:"";
   position:absolute;
   inset:-2px;
-  background:linear-gradient(45deg, cyan, blue, cyan);
+  background:linear-gradient(45px, cyan, blue, cyan);
   filter:blur(10px);
   z-index:-1;
   opacity:0.8;
@@ -454,7 +453,7 @@ body{
   100%{left:100%;}
 }
 
-/* 3D AVATAR ENHANCED */
+/* 2D AVATAR ENHANCED */
 .drag-hint {
   font-size: 10px;
   color: #0ff;
