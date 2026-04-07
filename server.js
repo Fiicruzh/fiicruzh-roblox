@@ -1,17 +1,3 @@
-// 🔥 LOAD AVATAR
-async function loadAvatar(){
-  try{
-    const res = await fetch("/api/avatar");
-    const data = await res.json();
-
-    if(data.avatar){
-      document.getElementById("avatar").src = data.avatar;
-    }
-  }catch(err){
-    console.log("Avatar error:", err);
-  }
-}
-
 const API = "/api";
 
 // 🔥 ANIMASI ANGKA (ANTI NaN)
@@ -263,6 +249,26 @@ app.get("/api", async (req,res)=>{
   res.json(data);
 });
 
+// 🔥 AVATAR AUTO ROBLOX
+app.get("/api/avatar", async (req,res)=>{
+  try{
+    const response = await fetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
+    );
+
+    const data = await response.json();
+
+    res.json({
+      avatar: data.data?.[0]?.imageUrl || ""
+    });
+
+  }catch(err){
+    res.json({ avatar:"" });
+  }
+});
+
+
+// 🔥 ITEMS + DETAIL + RARITY + PRICE
 app.get("/api/items", async (req,res)=>{
   try{
     const wearRes = await fetch(
@@ -270,30 +276,21 @@ app.get("/api/items", async (req,res)=>{
     );
 
     const wearData = await wearRes.json();
-
     let ids = wearData.assetIds;
 
-    // fallback kalau kosong
     if(!ids || ids.length === 0){
-      ids = [
-        2510233257,
-        13948472096,
-        14618207727,
-        72586402670658,
-        88273993498454
-      ];
+      return res.json([]);
     }
 
-    // 🔥 ambil thumbnail sekali
+    // 🔥 THUMBNAIL SEKALI
     const thumbRes = await fetch(
-      "https://thumbnails.roblox.com/v1/assets?assetIds=" + ids.join(",") + "&size=150x150&format=Png&isCircular=false"
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png&isCircular=false`
     );
 
     const thumbData = await thumbRes.json();
 
     const result = [];
 
-    // 🔥 LOOP SATU-SATU (ANTI ERROR)
     for(let i=0;i<ids.length;i++){
       const id = ids[i];
 
@@ -302,19 +299,31 @@ app.get("/api/items", async (req,res)=>{
           `https://economy.roblox.com/v2/assets/${id}/details`
         );
 
-        const detail = await detailRes.json();
+        const d = await detailRes.json();
+
+        // 🔥 RARITY SYSTEM
+        let rarity = "common";
+        if(d.IsLimited || d.IsLimitedUnique) rarity = "limited";
+        else if(d.PriceInRobux > 1000) rarity = "legendary";
+        else if(d.PriceInRobux > 200) rarity = "epic";
 
         result.push({
-          name: detail.Name || "Unknown Item",
-          image: thumbData.data?.[i]?.imageUrl || "https://via.placeholder.com/150",
+          name: d.Name || "Unknown",
+          price: d.PriceInRobux || 0,
+          limited: d.IsLimited || d.IsLimitedUnique || false,
+          rarity: rarity,
+          image: thumbData.data?.[i]?.imageUrl || "",
           link: `https://www.roblox.com/catalog/${id}`
         });
 
-      }catch(e){
+      }catch{
         result.push({
-          name: "Unknown Item",
-          image: thumbData.data?.[i]?.imageUrl || "https://via.placeholder.com/150",
-          link: `https://www.roblox.com/catalog/${id}`
+          name:"Unknown",
+          price:0,
+          limited:false,
+          rarity:"common",
+          image: thumbData.data?.[i]?.imageUrl || "",
+          link:`https://www.roblox.com/catalog/${id}`
         });
       }
     }
@@ -322,15 +331,8 @@ app.get("/api/items", async (req,res)=>{
     res.json(result);
 
   }catch(err){
-    console.log("❌ ERROR ROBLOX:", err);
-
-    res.json([
-      {
-        name:"Fallback",
-        image:"https://via.placeholder.com/150",
-        link:"#"
-      }
-    ]);
+    console.log("ITEM ERROR:", err);
+    res.json([]);
   }
 });
 
