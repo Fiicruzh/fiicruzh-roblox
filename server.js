@@ -20,14 +20,12 @@ app.use(express.static(path.join(__dirname, "public")));
 // Roblox User ID
 const USER_ID = 8941948601;
 
-// Global data
 let currentData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
   lastItemsUpdate: 0
 };
 
-// ✅ FIXED: Get current host for Railway
 const getCurrentHost = () => {
   if (process.env.RAILWAY_STATIC_URL) {
     return `https://${process.env.RAILWAY_STATIC_URL}`;
@@ -53,7 +51,6 @@ async function robloxFetch(url, retries = 3) {
   }
 }
 
-// 🔥 STATS API
 app.get("/api", async (req, res) => {
   console.log('📊 Fetching stats...');
   
@@ -81,7 +78,6 @@ app.get("/api", async (req, res) => {
   }
 });
 
-// 🔥 AVATAR API
 app.get("/api/avatar", async (req, res) => {
   console.log('👤 Fetching avatar...');
   
@@ -104,7 +100,6 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API
 app.get("/api/items", async (req, res) => {
   console.log('🎒 Fetching items...');
   
@@ -120,13 +115,11 @@ app.get("/api/items", async (req, res) => {
 
     const assetIds = wearRes.data.assetIds.slice(0, 20);
     
-    // Thumbnails
     const thumbsRes = await robloxFetch(
       `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(',')}&size=150x150&format=Png`
     );
     const thumbs = thumbsRes.success ? (thumbsRes.data.data || []) : [];
 
-    // Item details
     const itemPromises = assetIds.map(async (id) => {
       try {
         const detailRes = await robloxFetch(`https://economy.roblox.com/v2/assets/${id}/details`);
@@ -143,11 +136,13 @@ app.get("/api/items", async (req, res) => {
           link: `https://www.roblox.com/catalog/${id}/item`
         };
       } catch {
+        // ✅ FIXED: Convert id to string before slice
+        const idStr = String(id);
         return {
           name: `Item #${id}`,
           price: 0,
           limited: false,
-          image: `https://via.placeholder.com/90x70/333/fff?text=ID${String(id).slice(-4)}`,
+          image: `https://via.placeholder.com/90x70/333/fff?text=ID${idStr.slice(-4)}`,
           link: `https://www.roblox.com/catalog/${id}`
         };
       }
@@ -170,7 +165,6 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-// 🔥 WEBSOCKET
 function broadcast(data) {
   const message = JSON.stringify(data);
   let sent = 0;
@@ -179,57 +173,41 @@ function broadcast(data) {
       try {
         client.send(message);
         sent++;
-      } catch (err) {
-        console.error('Broadcast error:', err);
-      }
+      } catch (err) {}
     }
   });
-  if (sent > 0) console.log(`📡 Broadcast to ${sent} clients`);
+  if (sent > 0) console.log(`📡 Broadcast: ${sent} clients`);
 }
 
 wss.on('connection', (ws) => {
   console.log('👤 Client connected');
-  
   ws.send(JSON.stringify({
     stats: currentData.stats,
     items: currentData.items,
     itemsCount: currentData.items.length
   }));
-
   ws.on('close', () => console.log('👋 Client disconnected'));
 });
 
-// ✅ FIXED: NO LOCALHOST CALLS IN RAILWAY
-// Auto refresh client-side only
-setInterval(() => {
-  // Client akan trigger via WebSocket
-}, 60000);
-
-// SPA Routing
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// Health check
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
     port: PORT,
     clients: wss.clients.size,
-    uptime: process.uptime(),
     stats: currentData.stats,
     itemsCount: currentData.items.length 
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server: http://localhost:${PORT}`);
-  console.log(`✅ Railway FIXED - No localhost calls`);
-  console.log(`👤 User ID: ${USER_ID}`);
+  console.log(`🚀 Server: port ${PORT}`);
+  console.log(`✅ FIXED - No more slice errors`);
 });
 
-// Graceful shutdown
 process.on('SIGTERM', () => {
-  console.log('🛑 Shutdown...');
   server.close(() => process.exit(0));
 });
