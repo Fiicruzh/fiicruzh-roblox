@@ -17,6 +17,7 @@ const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ 
   server,
+  // Railway WebSocket fix
   perMessageDeflate: false
 });
 
@@ -29,15 +30,15 @@ let cachedData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
   totalValue: 0,
-  lastUpdate: 0,
-  lastWearHash: '',
-  lastItemsHash: ''
+  lastUpdate: 0
 };
 
 // Cache duration 30 seconds
 const CACHE_DURATION = 30000;
 
-// 🔥 SMART CACHING + CHANGE DETECTION
+// ==========================
+// 🔥 SMART CACHING + RETRY
+// ==========================
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
@@ -50,10 +51,6 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   }
 }
 
-function getWearHash(assetIds) {
-  return assetIds ? assetIds.sort().join(',') : '';
-}
-
 // ==========================
 // 🔥 API STATS (CACHED)
 // ==========================
@@ -61,6 +58,7 @@ app.get("/api", async (req, res) => {
   try {
     const now = Date.now();
     
+    // Return cached if fresh
     if (now - cachedData.lastUpdate < CACHE_DURATION) {
       return res.json(cachedData.stats);
     }
@@ -84,7 +82,9 @@ app.get("/api", async (req, res) => {
     cachedData.stats = stats;
     cachedData.lastUpdate = now;
 
+    // Broadcast via WebSocket
     broadcast({ stats });
+
     res.json(stats);
 
   } catch (err) {
@@ -94,7 +94,7 @@ app.get("/api", async (req, res) => {
 });
 
 // ==========================
-// 🔥 2D AVATAR API
+// 🔥 3D AVATAR API
 // ==========================
 app.get("/api/avatar", async (req, res) => {
   try {
@@ -113,13 +113,12 @@ app.get("/api/avatar", async (req, res) => {
 });
 
 // ==========================
-// 🔥 ITEMS - ONLY UPDATE IF CHANGED
+// 🔥 ITEMS + TOTAL VALUE + LIMITED
 // ==========================
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
     
-    // 🔥 FIRST CHECK: Cache fresh?
     if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
       return res.json({
         items: cachedData.items,
@@ -127,29 +126,16 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // 🔥 CHECK 1: Get currently wearing - DETECT CHANGE
+    // Get currently wearing
     const wear = await fetchWithRetry(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
     ).then(r => r.json());
-
-    const currentWearHash = getWearHash(wear.assetIds);
-    
-    // 🔥 CHANGE DETECTED? Only process if wear changed
-    if (currentWearHash === cachedData.lastWearHash && cachedData.items.length > 0) {
-      console.log('📦 No item changes detected');
-      return res.json({
-        items: cachedData.items,
-        totalValue: cachedData.totalValue
-      });
-    }
 
     let ids = wear.assetIds || [];
     if (ids.length === 0) {
       cachedData.items = [];
       cachedData.totalValue = 0;
       cachedData.lastUpdate = now;
-      cachedData.lastWearHash = '';
-      broadcast({ items: [], totalValue: 0 });
       return res.json({ items: [], totalValue: 0 });
     }
 
@@ -159,11 +145,11 @@ app.get("/api/items", async (req, res) => {
     );
     const thumbs = await thumbsRes.json();
 
-    // Process items
+    // Process each item
     const result = [];
     let totalValue = 0;
 
-    for (const id of ids.slice(0, 20)) {
+    for (const id of ids.slice(0, 20)) { // Limit 20 items
       try {
         const detailRes = await fetchWithRetry(
           `https://economy.roblox.com/v2/assets/${id}/details`
@@ -195,16 +181,11 @@ app.get("/api/items", async (req, res) => {
       }
     }
 
-    // 🔥 UPDATE CACHE ONLY IF CHANGED
     cachedData.items = result;
     cachedData.totalValue = totalValue;
     cachedData.lastUpdate = now;
-    cachedData.lastWearHash = currentWearHash;
-    cachedData.lastItemsHash = result.map(item => `${item.name}-${item.price}`).join('|');
 
-    console.log(`📦 ITEMS CHANGED! New wear hash: ${currentWearHash}`);
-
-    // Broadcast ONLY when items change
+    // Broadcast via WebSocket
     broadcast({
       items: result,
       totalValue: totalValue
@@ -240,38 +221,36 @@ function broadcast(data) {
 }
 
 // ==========================
+// ==========================
 // 🔥 WEBSOCKET HANDLER
 // ==========================
 wss.on('connection', (ws) => {
   console.log('👤 WebSocket client connected');
   
-  // Send cached data immediately
-  ws.send(JSON.stringify({
-    stats: cachedData.stats,
-    items: cachedData.items,
-    totalValue: cachedData.totalValue
-  }));
+  // Send cached data immediately - FIXED
+  ws.send(JSON.stringify(cachedData));
 
   ws.on('close', () => {
     console.log('👋 WebSocket client disconnected');
   });
 });
 
-// 🔥 SMART AUTO UPDATE - 30 SECONDS
+// 🔥 AUTO UPDATE EVERY 30 SECONDS - REAL TIME
 setInterval(async () => {
-  console.log('🔄 LIVE UPDATE: Checking for changes...');
+  console.log('🔄 LIVE UPDATE: Refreshing data...');
   try {
-    // Always refresh stats
+    // Force refresh stats & items
     await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`);
-    
-    // Check items only (smart detection handles refresh)
     await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`);
     
-    console.log('✅ LIVE UPDATE: Complete');
+    // Broadcast to ALL clients INSTANTLY
+    broadcast(cachedData);
+    console.log('✅ LIVE UPDATE: Data refreshed & broadcasted');
+    document.getElementById('liveIndicator').textContent = '🟢'; // Client side
   } catch (err) {
     console.error('Auto update failed:', err);
   }
-}, 30000);
+}, 30000); // 30 seconds
 
 // ==========================
 // 🔥 RAILWAY/SPA ROUTING
@@ -292,8 +271,8 @@ app.get('/health', (req, res) => {
 // ==========================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 WebSocket: ws://${process.env.RAILWAY_STATIC_URL || 'localhost'}:${PORT}/websocket`);
-  console.log('✅ Portfolio ready! 🚀');
+  console.log(`📡 WebSocket: ws://${process.env.RAILWAY_STATIC_URL || 'localhost'}:${PORT}/ws`);
+  console.log('✅ Railway ready!');
 });
 
 // Graceful shutdown
