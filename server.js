@@ -103,7 +103,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API (HANYA AKSESORIS & PAKAIAN)
+// 🔥 ITEMS API - SEMUA AKSESORIS & PAKAIAN EQUIPPED
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -112,71 +112,69 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    // 1. Get currently wearing
+    // 1. Get ALL currently wearing items
     const wearRes = await fetchWithRetry(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+      `https://avatar.roblox.com/v1/users/${USER_ID}/outfit`
     );
     const wear = await wearRes.json();
 
-    let allAssetIds = wear.assetIds || [];
+    // 2. Extract SEMUA asset IDs yang equipped
+    let allAssetIds = [];
     
-    // 2. Filter hanya aksesoris & pakaian (exclude hat, hair, etc yang bukan equipped)
-    const validAssetTypes = [2, 4, 8, 11, 12]; // Shirt=11, Pants=12, T-Shirt=4, Body=2, Face=8
+    // Add dari outfit assets
+    if (wear.assets) {
+      wear.assets.forEach(asset => {
+        if (asset.id) allAssetIds.push(asset.id);
+      });
+    }
     
-    const filteredIds = [];
-    
-    // 3. Get asset details untuk filter type
-    for (const id of allAssetIds.slice(0, 30)) { // Max 30 untuk safety
-      try {
-        const detailRes = await fetchWithRetry(
-          `https://economy.roblox.com/v2/assets/${id}/details`,
-          2, 500 // Less retry untuk speed
-        );
-        const detail = await detailRes.json();
-        
-        // ✅ HANYA aksesoris & pakaian yang equipped
-        if (validAssetTypes.includes(detail.AssetTypeId)) {
-          filteredIds.push(id);
-        }
-      } catch (itemErr) {
-        console.log(`Item ${id} skipped (not clothing/accessory)`);
-      }
+    // Add dari legacy assetIds (backup)
+    if (wear.assetIds) {
+      wear.assetIds.forEach(id => allAssetIds.push(id));
     }
 
-    if (filteredIds.length === 0) {
+    // Remove duplicates
+    allAssetIds = [...new Set(allAssetIds)];
+
+    console.log(`🔍 Found ${allAssetIds.length} equipped items`);
+
+    if (allAssetIds.length === 0) {
       cachedData.items = [];
       cachedData.lastUpdate = now;
       return res.json({ items: [] });
     }
 
-    // 4. Get thumbnails untuk filtered items
+    // 3. Get thumbnails untuk SEMUA items
     const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${filteredIds.join(",")}&size=150x150&format=Png`
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${allAssetIds.slice(0,24).join(",")}&size=150x150&format=Png`
     );
     const thumbs = await thumbsRes.json();
 
-    // 5. Create final items (max 12 items)
+    // 4. Process SEMUA items (max 24 untuk smooth)
     const result = [];
-    for (const id of filteredIds.slice(0, 12)) {
+    for (const id of allAssetIds.slice(0, 24)) {
       try {
         const detailRes = await fetchWithRetry(
-          `https://economy.roblox.com/v2/assets/${id}/details`
+          `https://economy.roblox.com/v2/assets/${id}/details`,
+          2, 800
         );
         const detail = await detailRes.json();
 
-        const thumb = thumbs.data?.find(t => t.targetId == id);
+        const thumb = thumbs.data?.find(t => t.targetId == parseInt(id));
 
+        // ✅ Tampilkan SEMUA equipped items (pakaian + aksesoris)
         result.push({
-          name: detail.Name || "Equipped Item",
-          image: thumb?.imageUrl || "https://via.placeholder.com/150?text=ROBLOX",
+          name: detail.Name || `Item #${id}`,
+          image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${id}/item`
         });
 
       } catch (itemErr) {
-        console.log(`Final item ${id} error`);
+        console.log(`Item ${id} fallback`);
+        // Fallback image
         result.push({
           name: "Equipped Item",
-          image: "https://via.placeholder.com/150?text=ITEM",
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${id}`
         });
       }
@@ -185,6 +183,7 @@ app.get("/api/items", async (req, res) => {
     cachedData.items = result;
     cachedData.lastUpdate = now;
 
+    console.log(`✅ Processed ${result.length} equipped items`);
     broadcast({ items: result });
     res.json({ items: result });
 
