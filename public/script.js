@@ -1,115 +1,126 @@
 class PortfolioApp {
   constructor() {
-    this.lastStats = { friends: -1, followers: -1, following: -1 };
     this.lastItems = [];
+    this.lastStats = { friends: -1, followers: -1, following: -1 };
     this.init();
   }
 
-  init() {
-    this.loadReal3DAvatar();
-    this.loadStats();
-    this.loadEquippedItems();
+  async init() {
+    await Promise.all([
+      this.loadReal3DAvatar(),
+      this.loadEquippedItems(),
+      this.loadStats()
+    ]);
     this.addInteractions();
     this.connectWebSocket();
   }
 
-  // 🔥 REAL ROBLOX 3D AVATAR - 360° Auto Rotate
+  // 🔥 REAL 3D AVATAR - 360° Canvas Rotation
   async loadReal3DAvatar() {
-    const canvas = document.getElementById('avatar3D');
-    const ctx = canvas.getContext('2d');
+    const canvas = document.createElement('canvas');
+    canvas.id = 'avatar3D';
     canvas.width = 200;
     canvas.height = 200;
+    canvas.className = 'avatar-canvas';
+    document.querySelector('.avatar-box').appendChild(canvas);
 
-    // Load Roblox avatar thumbnails untuk 360° effect
-    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
-    const images = [];
-    
-    for (let angle of angles) {
+    const ctx = canvas.getContext('2d');
+    let rotation = 0;
+    let images = [];
+
+    // Load 8 angles untuk 3D effect
+    for (let i = 0; i < 8; i++) {
       try {
-        const res = await fetch(`/api/avatar3d?angle=${angle}`);
+        const res = await fetch(`/api/avatar`);
         const data = await res.json();
         const img = new Image();
+        img.crossOrigin = 'anonymous';
         img.src = data.image;
-        images.push(img);
-      } catch (e) {
-        images.push(new Image());
+        images[i] = img;
+      } catch {
+        images[i] = new Image();
+        images[i].src = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=8941948601&size=420x420&format=Png`;
       }
     }
 
-    let rotation = 0;
     function animate() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // 3D projection
+      // Smooth 3D rotation
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(rotation * 0.01);
+      ctx.rotate((rotation * 0.02) + Math.sin(rotation * 0.01) * 0.1);
       
-      // Lighting
-      const gradient = ctx.createRadialGradient(0, -20, 0, 0, 0, 120);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.3)');
+      // Dynamic lighting
+      const gradient = ctx.createRadialGradient(0, -25, 0, 0, 0, 100);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
+      gradient.addColorStop(0.6, 'rgba(0,255,255,0.1)');
       gradient.addColorStop(1, 'transparent');
       ctx.fillStyle = gradient;
       ctx.fillRect(-90, -90, 180, 180);
       
+      // Shadow & glow
+      ctx.shadowColor = 'rgba(0,255,255,0.6)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetY = 8;
+      
       // Draw current frame
       const frame = Math.floor(rotation / 45) % 8;
-      if (images[frame]?.complete) {
-        ctx.shadowColor = 'cyan';
-        ctx.shadowBlur = 15;
-        ctx.drawImage(images[frame], -85, -85, 170, 170);
+      if (images[frame]?.complete && images[frame].naturalWidth > 0) {
+        ctx.drawImage(images[frame], -90, -90, 180, 180);
       }
       
       ctx.restore();
-      rotation += 1;
+      rotation += 1.2;
       requestAnimationFrame(animate);
     }
     animate();
   }
 
-  // 🔥 LOAD ALL EQUIPPED ITEMS
+  // 🔥 LOAD ALL EQUIPPED ITEMS WITH RARITY
   async loadEquippedItems() {
     try {
       const res = await fetch('/api/equipped');
       const data = await res.json();
       
       if (JSON.stringify(data.items) !== JSON.stringify(this.lastItems)) {
-        this.renderItems(data.items);
+        this.renderItems(data.items || []);
         this.lastItems = data.items;
+        document.getElementById('liveIndicator').textContent = '🟢';
       }
     } catch (err) {
-      console.error('Equipped items failed:', err);
+      console.error('Items load error:', err);
     }
   }
 
   renderItems(items) {
-    const container = document.getElementById("itemsContainer");
-    if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+    const container = document.getElementById('itemsContainer');
+    if (!items.length) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:12px">No items equipped</div>';
       return;
     }
 
-    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
+    container.innerHTML = items.map((item, index) => {
+      const rarity = this.getRarity(item.name);
+      return `
+        <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+          ${index < 4 ? '<div class="equipped">ON</div>' : ''}
+          ${item.limited ? '<div class="limited">★ LIMITED</div>' : ''}
+          <img src="${item.image}" 
+               onerror="this.src='https://via.placeholder.com/90x70/222/fff?text=ROBLOX';this.onerror=null;"
+               loading="lazy">
+          <div class="item-name">${item.name.length > 15 ? item.name.substring(0, 15) + '...' : item.name}</div>
+        </div>
+      `;
+    }).join('');
   }
 
-  getRarity(itemName) {
-    const name = itemName.toLowerCase();
-    if (name.includes('legendary') || name.includes('dragon') || name.includes('golden')) return "legendary";
-    if (name.includes('epic') || name.includes('shadow') || name.includes('neon')) return "epic";
-    if (name.includes('rare') || name.includes('star') || name.includes('crystal')) return "rare";
-    return "";
-  }
-
-  createItemCard(item, index) {
-    const rarity = this.getRarity(item.name);
-    return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link}')">
-        ${index < 3 ? '<div class="equipped">ON</div>' : ''}
-        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
-        <div class="item-name">${item.name}</div>
-      </div>
-    `;
+  getRarity(name) {
+    const lower = name.toLowerCase();
+    if (lower.includes('legendary') || lower.includes('dragon') || lower.includes('golden')) return 'legendary';
+    if (lower.includes('epic') || lower.includes('shadow') || lower.includes('neon')) return 'epic';
+    if (lower.includes('rare') || lower.includes('star') || lower.includes('crystal')) return 'rare';
+    return '';
   }
 
   async loadStats() {
@@ -117,92 +128,118 @@ class PortfolioApp {
       const res = await fetch('/api/stats');
       const data = await res.json();
       
-      if (data.friends !== this.lastStats.friends) {
-        this.animate(document.getElementById("friends"), data.friends);
-        this.lastStats.friends = data.friends;
-      }
-      if (data.followers !== this.lastStats.followers) {
-        this.animate(document.getElementById("followers"), data.followers);
-        this.lastStats.followers = data.followers;
-      }
-      if (data.following !== this.lastStats.following) {
-        this.animate(document.getElementById("following"), data.following);
-        this.lastStats.following = data.following;
-      }
+      // Smooth counter animation
+      this.animateCounter('friends', data.friends || 0);
+      this.animateCounter('followers', data.followers || 0);
+      this.animateCounter('following', data.following || 0);
+      
+      this.lastStats = data;
     } catch (err) {
-      console.error('Stats failed:', err);
+      console.error('Stats error:', err);
     }
   }
 
-  animate(el, end) {
-    end = Number(end) || 0;
-    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 800;
-    let startTime = null;
+  animateCounter(id, target) {
+    const el = document.getElementById(id);
+    const current = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    if (Math.abs(target - current) < 10) {
+      el.textContent = target.toLocaleString();
+      return;
+    }
 
-    const step = (timestamp) => {
+    let startTime = null;
+    const duration = 1200;
+
+    const animate = (timestamp) => {
       if (!startTime) startTime = timestamp;
       const progress = Math.min((timestamp - startTime) / duration, 1);
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const value = Math.floor(start + (end - start) * easeProgress);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const value = Math.floor(current + (target - current) * eased);
+      
       el.textContent = value.toLocaleString();
-      if (progress < 1) requestAnimationFrame(step);
+      
+      if (progress < 1) {
+        requestAnimationFrame(animate);
+      }
     };
-    requestAnimationFrame(step);
+    requestAnimationFrame(animate);
   }
 
+  // 🔥 OPTIMIZED WEBSOCKET
   connectWebSocket() {
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
-    const ws = new WebSocket(wsUrl);
-    
-    ws.onopen = () => {
-      document.getElementById('liveIndicator').textContent = '🟢';
-    };
+    try {
+      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const ws = new WebSocket(`${protocol}//${location.host}/websocket`);
+      
+      ws.onopen = () => {
+        console.log('✅ WebSocket connected');
+        document.getElementById('liveIndicator').textContent = '🟢';
+      };
 
-    ws.onmessage = async (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        if (data.equipped) {
-          if (JSON.stringify(data.equipped.items) !== JSON.stringify(this.lastItems)) {
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.equipped && JSON.stringify(data.equipped.items) !== JSON.stringify(this.lastItems)) {
             this.renderItems(data.equipped.items);
             this.lastItems = data.equipped.items;
           }
+          if (data.stats) {
+            Object.entries(data.stats).forEach(([key, value]) => {
+              if (this.lastStats[key] !== value) {
+                this.animateCounter(key, value);
+                this.lastStats[key] = value;
+              }
+            });
+          }
+        } catch (e) {
+          console.error('WS parse error:', e);
         }
-        if (data.stats) {
-          Object.keys(data.stats).forEach(key => {
-            if (data.stats[key] !== this.lastStats[key]) {
-              this.animate(document.getElementById(key), data.stats[key]);
-              this.lastStats[key] = data.stats[key];
-            }
-          });
-        }
-      } catch (err) {}
-    };
+      };
 
-    ws.onclose = () => {
-      document.getElementById('liveIndicator').textContent = '🔴';
-    };
+      ws.onclose = () => {
+        document.getElementById('liveIndicator').textContent = '🔴';
+        // Auto reconnect
+        setTimeout(() => this.connectWebSocket(), 5000);
+      };
+    } catch (e) {
+      console.error('WebSocket init failed:', e);
+    }
   }
 
   addInteractions() {
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.classList.add('copied');
-        btn.innerHTML = '✅ Copied!';
+    // Copy button with feedback
+    const copyBtn = document.getElementById('copyBtn');
+    copyBtn.onclick = async () => {
+      try {
+        await navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4');
+        copyBtn.classList.add('copied');
+        copyBtn.innerHTML = '✅ Copied!';
         setTimeout(() => {
-          btn.classList.remove('copied');
-          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-        }, 1500);
-      });
+          copyBtn.classList.remove('copied');
+          copyBtn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+        }, 2000);
+      } catch {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
     };
 
-    // Auto refresh equipped items every 15s
-    setInterval(() => this.loadEquippedItems(), 15000);
+    // Auto refresh
+    setInterval(() => {
+      this.loadEquippedItems();
+      this.loadStats();
+    }, 25000); // 25s
   }
 }
 
-let app;
-document.addEventListener('DOMContentLoaded', () => {
-  app = new PortfolioApp();
-});
+// Initialize when DOM ready
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', () => new PortfolioApp());
+} else {
+  new PortfolioApp();
+}
