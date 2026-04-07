@@ -1,3 +1,5 @@
+const API = "/api";
+
 async function loadAvatar(){
   try{
     const res = await fetch("/api/avatar");
@@ -6,17 +8,14 @@ async function loadAvatar(){
     if(data.image){
       document.getElementById("avatar").src = data.image;
     }
-
   }catch{
     console.log("Avatar gagal load");
   }
 }
 
-const API = "/api";
-
-// 🔥 ANIMASI ANGKA (ANTI NaN)
+// 🔥 ANIMATE
 function animate(el, end){
-  end = Number(end) || 0; // FIX NaN
+  end = Number(end) || 0;
 
   let start = 0;
   let duration = 1200;
@@ -39,33 +38,76 @@ function animate(el, end){
   requestAnimationFrame(step);
 }
 
-// 🔥 LOAD DATA ROBLOX (ANTI ERROR)
+// 🔥 LOAD STATS FIX
 async function loadStats(){
   try{
     const res = await fetch(API);
-
-    if(!res.ok) throw new Error("API ERROR");
-
     const data = await res.json();
 
-    console.log("DATA ROBLOX:", data); // debug
+    console.log("DATA:", data);
 
-    animate(document.getElementById("friends"), data.friends);
-    animate(document.getElementById("followers"), data.followers);
-    animate(document.getElementById("following"), data.following);
+    // 🔥 VALIDASI BIAR GAK 0 PALSU
+    const friends = data.friends ?? 0;
+    const followers = data.followers ?? 0;
+    const following = data.following ?? 0;
+
+    animate(document.getElementById("friends"), friends);
+    animate(document.getElementById("followers"), followers);
+    animate(document.getElementById("following"), following);
 
   }catch(err){
-    console.error("GAGAL LOAD:", err);
-
-    // fallback kalau error
-    animate(document.getElementById("friends"), 0);
-    animate(document.getElementById("followers"), 0);
-    animate(document.getElementById("following"), 0);
+    console.log("ERROR:", err);
   }
 }
 
-// 🔥 LOAD AWAL + AUTO REFRESH
-loadStats();
+// 🔥 LOAD ITEMS
+async function loadItems(){
+  const container = document.getElementById("itemsContainer");
+  if(!container) return;
+
+  container.innerHTML = "";
+
+  for(let i=0;i<5;i++){
+    const sk = document.createElement("div");
+    sk.className = "skeleton";
+    container.appendChild(sk);
+  }
+
+  try{
+    const res = await fetch("/api/items");
+    const items = await res.json();
+
+    container.innerHTML = "";
+
+    const finalItems = (items && items.length) ? items : [
+      {name:"No Item", image:"https://via.placeholder.com/150", link:"#"}
+    ];
+
+    finalItems.slice(0,20).forEach((item,i)=>{
+      const div = document.createElement("div");
+      div.className = "item-card";
+
+      div.innerHTML = `
+        <img src="${item.image}">
+        <div class="item-name">${item.name}</div>
+      `;
+
+      container.appendChild(div);
+    });
+
+  }catch{
+    container.innerHTML = "Gagal load";
+  }
+}
+
+// 🔥 INIT
+window.addEventListener("DOMContentLoaded", ()=>{
+  loadAvatar();
+  loadStats();
+  loadItems();
+});
+
+// 🔥 AUTO REFRESH
 setInterval(loadStats, 5000);
 
 // 🔥 EFEK KLIK BUTTON
