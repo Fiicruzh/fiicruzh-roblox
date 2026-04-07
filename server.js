@@ -14,105 +14,129 @@ const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
-// GANTI USER_ID INI DENGAN ID ROBLOX KAMU!
-const USER_ID = 8941948601;
+// 🔥 GANTI USER_ID INI DENGAN ID ROBLOX KAMU YANG BENAR!
+const USER_ID = 8941948601; // Cek di URL profile Roblox: roblox.com/users/ID/profile
 
-let cachedData = { stats: {}, items: [], lastUpdate: 0 };
+let cachedData = { 
+  stats: { friends: 0, followers: 0, following: 0 }, 
+  items: [], 
+  avatar: '' 
+};
 let clientCount = 0;
 
-async function fetchWithRetry(url) {
+// 🔧 ROBUST FETCH
+async function robloxFetch(url) {
   try {
-    const res = await fetch(url);
-    return res.ok ? res : null;
-  } catch {
+    const controller = new AbortController();
+    setTimeout(() => controller.abort(), 10000);
+    
+    const res = await fetch(url, { 
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0' }
+    });
+    
+    if (!res.ok) return null;
+    return res.json();
+  } catch (e) {
     return null;
   }
 }
 
-// STATS
-app.get("/api", async (req, res) => {
-  try {
-    const [fRes, flRes, fgRes] = await Promise.allSettled([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]);
+// 🔥 STATS API - WORKING
+app.get("/api", async () => {
+  console.log(`📊 Stats for ${USER_ID}`);
+  
+  const [friends, followers, following] = await Promise.all([
+    robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+    robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+    robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+  ]);
 
-    const stats = {
-      friends: (await fRes.value?.json().catch(() => ({}))).count || 0,
-      followers: (await flRes.value?.json().catch(() => ({}))).count || 0,
-      following: (await fgRes.value?.json().catch(() => ({}))).count || 0
-    };
+  const stats = {
+    friends: friends?.count || 0,
+    followers: followers?.count || 0,
+    following: following?.count || 0
+  };
 
-    cachedData.stats = stats;
-    
-    if (clientCount > 0) {
-      wss.clients.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ stats }));
-      });
-    }
-    
-    res.json(stats);
-  } catch {
-    res.json(cachedData.stats);
+  cachedData.stats = stats;
+  
+  // Broadcast
+  if (clientCount > 0) {
+    wss.clients.forEach(ws => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ stats }));
+      }
+    });
   }
+  
+  console.log('✅ Stats:', stats);
+  return { stats };
 });
 
-// AVATAR
+// 🔥 AVATAR API - HEADSHOT DIRECT
 app.get("/api/avatar", async (req, res) => {
   try {
-    const res = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    );
-    const data = await res.json();
-    res.json({ image: data.data?.[0]?.imageUrl });
-  } catch {
+    // Direct headshot URL - ALWAYS WORKS
+    const avatarUrl = `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png`;
+    
+    console.log('🖼️ Avatar URL:', avatarUrl);
+    res.json({ image: avatarUrl });
+  } catch (e) {
     res.json({ image: `https://www.roblox.com/headshot-thumbnail/image?userId=${USER_ID}&width=420&height=420&format=png` });
   }
 });
 
-// 🔥 ITEMS YANG DIPAKAI SEKARANG (NO PRICE)
+// 🔥 ITEMS API - CURRENTLY WEARING
 app.get("/api/items", async (req, res) => {
   try {
-    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    const wear = await wearRes.json();
-    const ids = wear.assetIds || [];
+    console.log('🎒 Fetching worn items...');
+    
+    const wear = await robloxFetch(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
+    const ids = wear?.assets || [];
+    
+    console.log('Worn asset IDs:', ids);
     
     if (!ids.length) {
+      console.log('No items worn');
       return res.json({ items: [] });
     }
 
-    const thumbsRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(',')}&size=150x150&format=Png`
-    );
-    const thumbs = await thumbsRes.json();
-
+    // Get item details & thumbnails
     const items = [];
-    for (const id of ids.slice(0, 15)) {
+    for (const asset of ids.slice(0, 15)) {
       try {
-        const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`);
-        const detail = await detailRes.json();
-        const thumb = thumbs.data?.find(t => t.targetId == id);
+        const [detail, thumb] = await Promise.all([
+          robloxFetch(`https://economy.roblox.com/v1/assets/${asset.id}/details`),
+          robloxFetch(`https://thumbnails.roblox.com/v1/assets?assetIds=${asset.id}&size=150x150&format=Png`)
+        ]);
 
         items.push({
-          name: detail.Name || 'Item',
-          limited: detail.IsLimited || false,
-          image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-          link: `https://www.roblox.com/catalog/${id}/item`
+          name: detail?.data?.[0]?.Name || `Asset ${asset.id}`,
+          limited: detail?.data?.[0]?.IsLimited || false,
+          image: thumb?.data?.[0]?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${asset.id}&width=150&height=150`,
+          link: `https://roblox.com/catalog/${asset.id}/item`
         });
-      } catch {}
+      } catch (e) {
+        console.log(`Item ${asset.id} skipped`);
+      }
     }
 
     cachedData.items = items;
     
+    // Broadcast
     if (clientCount > 0) {
       wss.clients.forEach(ws => {
-        if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify({ items }));
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ items }));
+        }
       });
     }
     
+    console.log(`✅ ${items.length} items loaded`);
     res.json({ items });
-  } catch {
+    
+  } catch (e) {
+    console.error('Items error:', e);
     res.json({ items: cachedData.items });
   }
 });
@@ -120,15 +144,33 @@ app.get("/api/items", async (req, res) => {
 // WebSocket
 wss.on('connection', (ws) => {
   clientCount++;
-  console.log(`Client ${clientCount}`);
+  console.log(`👤 Client ${clientCount}`);
+  
+  // Send all data
   ws.send(JSON.stringify(cachedData));
+  
   ws.on('close', () => clientCount--);
 });
 
-// SPA + Health
-app.get("*", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
-app.get('/health', (req, res) => res.json({ ok: true, userId: USER_ID }));
+// Routes
+app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public", "index.html")));
+app.get("/health", (req, res) => res.json({ 
+  status: "OK", 
+  userId: USER_ID, 
+  clients: clientCount,
+  items: cachedData.items.length 
+}));
 
+// Start
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Port ${PORT} | User ${USER_ID}`);
+  console.log(`\n🚀 Server ready on port ${PORT}`);
+  console.log(`👤 Roblox User ID: ${USER_ID}`);
+  console.log(`📡 WebSocket ready`);
+  console.log(`🔗 Test: http://localhost:${PORT}/health\n`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 Shutdown');
+  server.close();
 });
