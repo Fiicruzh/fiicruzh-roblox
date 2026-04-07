@@ -221,17 +221,14 @@ function broadcast(data) {
 }
 
 // ==========================
+// ==========================
 // 🔥 WEBSOCKET HANDLER
 // ==========================
 wss.on('connection', (ws) => {
   console.log('👤 WebSocket client connected');
   
-  // Send cached data immediately
-  ws.send(JSON.stringify({
-    stats: cachedData.stats,
-    items: cachedData.items,
-    totalValue: cachedData.totalValue
-  }));
+  // Send cached data immediately - FIXED
+  ws.send(JSON.stringify(cachedData));
 
   ws.on('close', () => {
     console.log('👋 WebSocket client disconnected');
