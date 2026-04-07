@@ -1,74 +1,84 @@
 class PortfolioApp {
   constructor() {
     this.lastStats = { friends: -1, followers: -1, following: -1 };
-    this.lastItemsHash = '';
+    this.lastItems = [];
     this.init();
   }
 
   init() {
-    this.loadAvatar();
+    this.loadReal3DAvatar();
     this.loadStats();
-    this.loadItems();
+    this.loadEquippedItems();
     this.addInteractions();
     this.connectWebSocket();
   }
 
-  // 🔥 LOAD AVATAR 3D DIRECT FROM ROBLOX
-  async loadAvatar() {
-    try {
-      const res = await fetch('/api/avatar');
-      const data = await res.json();
-      document.getElementById('avatar3D').src = data.image;
-    } catch (err) {
-      console.error('Avatar load failed:', err);
-      document.getElementById('avatar3D').src = 'https://thumbnails.roblox.com/v1/users/avatar?userIds=8941948601&size=420x420&format=Png&isCircular=false';
+  // 🔥 REAL ROBLOX 3D AVATAR - 360° Auto Rotate
+  async loadReal3DAvatar() {
+    const canvas = document.getElementById('avatar3D');
+    const ctx = canvas.getContext('2d');
+    canvas.width = 200;
+    canvas.height = 200;
+
+    // Load Roblox avatar thumbnails untuk 360° effect
+    const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+    const images = [];
+    
+    for (let angle of angles) {
+      try {
+        const res = await fetch(`/api/avatar3d?angle=${angle}`);
+        const data = await res.json();
+        const img = new Image();
+        img.src = data.image;
+        images.push(img);
+      } catch (e) {
+        images.push(new Image());
+      }
     }
+
+    let rotation = 0;
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // 3D projection
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rotation * 0.01);
+      
+      // Lighting
+      const gradient = ctx.createRadialGradient(0, -20, 0, 0, 0, 120);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.3)');
+      gradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-90, -90, 180, 180);
+      
+      // Draw current frame
+      const frame = Math.floor(rotation / 45) % 8;
+      if (images[frame]?.complete) {
+        ctx.shadowColor = 'cyan';
+        ctx.shadowBlur = 15;
+        ctx.drawImage(images[frame], -85, -85, 170, 170);
+      }
+      
+      ctx.restore();
+      rotation += 1;
+      requestAnimationFrame(animate);
+    }
+    animate();
   }
 
-  // 🔥 SMART LOAD - ONLY IF CHANGED
-  async loadStats() {
+  // 🔥 LOAD ALL EQUIPPED ITEMS
+  async loadEquippedItems() {
     try {
-      const res = await fetch('/api/stats');
+      const res = await fetch('/api/equipped');
       const data = await res.json();
       
-      // Only update if changed
-      if (data.friends !== this.lastStats.friends) {
-        this.animate(document.getElementById("friends"), data.friends);
-        this.lastStats.friends = data.friends;
-      }
-      if (data.followers !== this.lastStats.followers) {
-        this.animate(document.getElementById("followers"), data.followers);
-        this.lastStats.followers = data.followers;
-      }
-      if (data.following !== this.lastStats.following) {
-        this.animate(document.getElementById("following"), data.following);
-        this.lastStats.following = data.following;
-      }
-    } catch (err) {
-      console.error('Stats failed:', err);
-    }
-  }
-
-  async loadItems() {
-    const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(8).fill().map(() => 
-      '<div class="loading-smooth"></div>'
-    ).join('');
-
-    try {
-      const res = await fetch('/api/items');
-      const data = await res.json();
-      
-      // Hash check - only update if changed
-      const itemsHash = JSON.stringify(data.items.map(i => i.name + i.image));
-      if (itemsHash !== this.lastItemsHash) {
+      if (JSON.stringify(data.items) !== JSON.stringify(this.lastItems)) {
         this.renderItems(data.items);
-        this.lastItemsHash = itemsHash;
+        this.lastItems = data.items;
       }
-      
     } catch (err) {
-      console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
+      console.error('Equipped items failed:', err);
     }
   }
 
@@ -93,8 +103,8 @@ class PortfolioApp {
   createItemCard(item, index) {
     const rarity = this.getRarity(item.name);
     return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
-        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
+      <div class="item-card ${rarity}" onclick="window.open('${item.link}')">
+        ${index < 3 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
         <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
         <div class="item-name">${item.name}</div>
@@ -102,10 +112,32 @@ class PortfolioApp {
     `;
   }
 
+  async loadStats() {
+    try {
+      const res = await fetch('/api/stats');
+      const data = await res.json();
+      
+      if (data.friends !== this.lastStats.friends) {
+        this.animate(document.getElementById("friends"), data.friends);
+        this.lastStats.friends = data.friends;
+      }
+      if (data.followers !== this.lastStats.followers) {
+        this.animate(document.getElementById("followers"), data.followers);
+        this.lastStats.followers = data.followers;
+      }
+      if (data.following !== this.lastStats.following) {
+        this.animate(document.getElementById("following"), data.following);
+        this.lastStats.following = data.following;
+      }
+    } catch (err) {
+      console.error('Stats failed:', err);
+    }
+  }
+
   animate(el, end) {
     end = Number(end) || 0;
     let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 1000;
+    const duration = 800;
     let startTime = null;
 
     const step = (timestamp) => {
@@ -114,25 +146,28 @@ class PortfolioApp {
       const easeProgress = 1 - Math.pow(1 - progress, 3);
       const value = Math.floor(start + (end - start) * easeProgress);
       el.textContent = value.toLocaleString();
-      
       if (progress < 1) requestAnimationFrame(step);
     };
     requestAnimationFrame(step);
   }
 
-  // 🔥 LIGHT WEBSOCKET - NO SPAM
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     const ws = new WebSocket(wsUrl);
     
     ws.onopen = () => {
-      console.log('✅ WebSocket connected');
       document.getElementById('liveIndicator').textContent = '🟢';
     };
 
-    ws.onmessage = (event) => {
+    ws.onmessage = async (event) => {
       try {
         const data = JSON.parse(event.data);
+        if (data.equipped) {
+          if (JSON.stringify(data.equipped.items) !== JSON.stringify(this.lastItems)) {
+            this.renderItems(data.equipped.items);
+            this.lastItems = data.equipped.items;
+          }
+        }
         if (data.stats) {
           Object.keys(data.stats).forEach(key => {
             if (data.stats[key] !== this.lastStats[key]) {
@@ -141,26 +176,15 @@ class PortfolioApp {
             }
           });
         }
-        if (data.items) {
-          const itemsHash = JSON.stringify(data.items.map(i => i.name + i.image));
-          if (itemsHash !== this.lastItemsHash) {
-            this.renderItems(data.items);
-            this.lastItemsHash = itemsHash;
-          }
-        }
-      } catch (err) {
-        console.error('WS parse error:', err);
-      }
+      } catch (err) {}
     };
 
     ws.onclose = () => {
-      console.log('❌ WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
     };
   }
 
   addInteractions() {
-    // Copy button
     document.getElementById('copyBtn').onclick = () => {
       navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
         const btn = document.getElementById('copyBtn');
@@ -169,19 +193,15 @@ class PortfolioApp {
         setTimeout(() => {
           btn.classList.remove('copied');
           btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-        }, 2000);
+        }, 1500);
       });
     };
 
-    // Check for updates every 60s (lightweight)
-    setInterval(() => {
-      this.loadStats();
-      this.loadItems();
-    }, 60000);
+    // Auto refresh equipped items every 15s
+    setInterval(() => this.loadEquippedItems(), 15000);
   }
 }
 
-// Global app instance
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
