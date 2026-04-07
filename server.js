@@ -8,164 +8,159 @@ const crypto = require("crypto");
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
-app.use(cors({ origin: "*", methods: ["GET", "POST"] }));
+app.use(cors({
+  origin: "*",
+  methods: ["GET", "POST"]
+}));
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ server, perMessageDeflate: false });
+const wss = new WebSocket.Server({ 
+  server,
+  perMessageDeflate: false
+});
 
 app.use(express.static(path.join(__dirname, "public")));
 
-const USER_ID = 8941948601; // Ganti dengan Roblox ID kamu jika berbeda
+// Roblox User ID
+const USER_ID = 8941948601;
 let cachedData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
   itemsHash: '',
   totalValue: 0,
-  avatar3d: '',
-  lastUpdate: 0
+  lastUpdate: 0,
+  lastItemsFingerprint: ''
 };
 
-// 🔥 BULLETPROOF FETCH
-async function safeApiCall(url) {
-  try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
-    
-    const response = await fetch(url, { 
-      signal: controller.signal,
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Portfolio)',
-        'Accept': 'application/json'
-      }
-    });
-    clearTimeout(timeoutId);
-    
-    if (!response?.ok || !response?.body) {
-      return { success: false, data: null };
-    }
-    
-    const text = await response.text();
-    let data;
+const CACHE_DURATION = 30000;
+
+// 🔥 SAFE FETCH WITH RETRY & ERROR HANDLING
+async function fetchWithRetry(url, retries = 3, delay = 1000) {
+  for (let i = 0; i < retries; i++) {
     try {
-      data = JSON.parse(text);
-    } catch {
-      return { success: false, data: null };
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 10000);
+      
+      const response = await fetch(url, {
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) return response;
+    } catch (err) {
+      if (i === retries - 1) throw err;
+      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
-    
-    return { success: true, data };
-  } catch {
-    return { success: false, data: null };
   }
 }
 
-// 🔥 STATS API - FIXED ENDPOINTS
+// 🔥 API STATS (SAFE)
 app.get("/api", async (req, res) => {
-  const now = Date.now();
-  if (now - cachedData.lastUpdate < 30000) {
-    return res.json(cachedData.stats);
-  }
-
   try {
-    console.log('🔄 Updating stats...');
+    const now = Date.now();
     
-    // FIXED ROBLOX ENDPOINTS - REAL DATA
-    const results = await Promise.all([
-      safeApiCall(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      safeApiCall(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      safeApiCall(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]);
-    
-    const stats = {
-      friends: results[0].success ? Math.floor(results[0].data.count || 0) : 0,
-      followers: results[1].success ? Math.floor(results[1].data.count || 0) : 0,
-      following: results[2].success ? Math.floor(results[2].data.count || 0) : 0
-    };
+    if (now - cachedData.lastUpdate < CACHE_DURATION) {
+      return res.json(cachedData.stats);
+    }
 
-    console.log(`📊 Stats: Friends:${stats.friends} Followers:${stats.followers} Following:${stats.following}`);
+    const requests = [
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).catch(() => ({json: () => Promise.resolve({count: 0})})),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).catch(() => ({json: () => Promise.resolve({count: 0})})),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).catch(() => ({json: () => Promise.resolve({count: 0})}))
+    ];
+
+    const [friendsRes, followersRes, followingRes] = await Promise.all(requests);
+    const [friends, followers, following] = await Promise.all([
+      friendsRes.json(),
+      followersRes.json(),
+      followingRes.json()
+    ]);
+
+    const stats = {
+      friends: friends.count || 0,
+      followers: followers.count || 0,
+      following: following.count || 0
+    };
 
     cachedData.stats = stats;
     cachedData.lastUpdate = now;
-    
-    // Broadcast
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        try {
-          client.send(JSON.stringify({ stats }));
-        } catch {}
-      }
-    });
 
+    broadcast({ stats });
     res.json(stats);
+
   } catch (err) {
-    console.error('Stats error:', err);
+    console.error("Stats error:", err.message);
     res.json(cachedData.stats);
   }
 });
 
-// 🔥 3D AVATAR .glb Roblox OFFICIAL
-app.get("/api/avatar3d", async (req, res) => {
+// 🔥 2D ROBLOX AVATAR API (SAFE)
+app.get("/api/avatar2d", async (req, res) => {
   try {
-    // Roblox Official 3D Avatar GLB
-    const glbUrl = `https://avatar.roblox.com/v1/users/${USER_ID}/avatar?format=glb`;
+    const avatarRes = await fetchWithRetry(
+      `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
+    ).catch(() => null);
     
-    const result = await safeApiCall(glbUrl);
-    
-    if (result.success) {
-      cachedData.avatar3d = result.data.url || '';
-      res.json({ glb: result.data.url || '' });
-    } else {
-      // Fallback to thumbnail
-      const thumbResult = await safeApiCall(
-        `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${USER_ID}&size=420x420&format=Png`
-      );
-      const thumbUrl = thumbResult.success && thumbResult.data.data?.[0]?.imageUrl || null;
-      res.json({ glb: null, fallback: thumbUrl });
+    if (!avatarRes) {
+      return res.json({ image: null });
     }
-  } catch {
-    res.json({ glb: null, fallback: null });
+    
+    const avatar = await avatarRes.json();
+    res.json({
+      image: avatar.data?.[0]?.imageUrl || null
+    });
+
+  } catch (err) {
+    console.error("Avatar error:", err.message);
+    res.json({ image: null });
   }
 });
 
-// 🔥 FULL ITEMS (SEMUA YANG DIPAKAI)
+// 🔥 SMART ITEMS - FULLY SAFE ✅ FIXED ERROR
 app.get("/api/items", async (req, res) => {
-  const checkOnly = req.query.checkOnly;
+  const checkOnly = req.query.checkOnly === 'true';
   const now = Date.now();
   
-  if (now - cachedData.lastUpdate < 30000 && cachedData.itemsHash) {
-    return res.json({
-      items: checkOnly ? [] : cachedData.items,
-      itemsHash: cachedData.itemsHash,
-      totalValue: cachedData.totalValue
-    });
-  }
-
   try {
-    console.log('🔄 Updating items...');
-    
-    const wearResult = await safeApiCall(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    let assetIds = wearResult.success ? (wearResult.data.assetIds || []) : [];
-
-    if (!assetIds?.length) {
-      const emptyHash = 'd41d8cd98f00b204';
-      cachedData.items = [];
-      cachedData.itemsHash = emptyHash;
-      cachedData.totalValue = 0;
-      cachedData.lastUpdate = now;
-      
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify({ items: [], itemsHash: emptyHash, totalValue: 0 }));
-        }
+    // QUICK CACHE CHECK
+    if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.itemsHash) {
+      return res.json({
+        items: checkOnly ? [] : cachedData.items,
+        itemsHash: cachedData.itemsHash,
+        totalValue: cachedData.totalValue
       });
-      
+    }
+
+    // SAFE Wear API call
+    let wear;
+    try {
+      const wearRes = await fetchWithRetry(
+        `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
+      );
+      wear = await wearRes.json();
+    } catch (wearErr) {
+      console.error("Wear API failed:", wearErr.message);
+      wear = { assetIds: [] };
+    }
+
+    const assetIds = wear.assetIds || [];
+    
+    // EMPTY INVENTORY CHECK
+    if (assetIds.length === 0) {
+      const emptyHash = crypto.createHash('md5').update('[]').digest('hex').slice(0, 16);
+      if (cachedData.itemsHash !== emptyHash) {
+        cachedData.items = [];
+        cachedData.itemsHash = emptyHash;
+        cachedData.totalValue = 0;
+        cachedData.lastUpdate = now;
+        broadcast({ items: [], itemsHash: emptyHash, totalValue: 0 });
+      }
       return res.json({ items: [], itemsHash: emptyHash, totalValue: 0 });
     }
 
-    console.log(`📦 Processing ${assetIds.length} wearing items`);
-
-    // CHANGE DETECTION
-    const fingerprint = assetIds.sort().join(',');
+    // FINGERPRINT CHECK
+    const fingerprint = assetIds.slice(0, 10).sort().join(',');
     if (fingerprint === cachedData.lastItemsFingerprint && !checkOnly) {
       return res.json({
         items: cachedData.items,
@@ -174,108 +169,175 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // THUMBNAILS BATCH
-    let thumbsData = { data: [] };
-    if (assetIds.length) {
-      const thumbsResult = await safeApiCall(
-        `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(',')}&size=150x150&format=Png`
+    // SAFE Thumbnails
+    let thumbs = { data: [] };
+    try {
+      const thumbsRes = await fetchWithRetry(
+        `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(",")}&size=150x150&format=Png`
       );
-      if (thumbsResult.success) thumbsData = thumbsResult.data;
+      thumbs = await thumbsRes.json();
+    } catch (thumbsErr) {
+      console.error("Thumbs failed:", thumbsErr.message);
     }
 
-    // PROCESS ALL ITEMS PARALLEL
-    const itemPromises = assetIds.map(async (id) => {
+    // PROCESS ITEMS SAFELY
+    const result = [];
+    let totalValue = 0;
+
+    for (const id of assetIds.slice(0, 20)) {
       try {
-        const itemResult = await safeApiCall(`https://economy.roblox.com/v2/assets/${id}/details`);
-        if (itemResult.success) {
-          const detail = itemResult.data;
-          const thumb = thumbsData.data?.find(t => t.targetId == parseInt(id));
+        const detailRes = await fetchWithRetry(
+          `https://economy.roblox.com/v2/assets/${id}/details`
+        );
+        const detail = await detailRes.json();
+        const thumb = thumbs.data?.find(t => t.targetId == id);
 
-          return {
-            name: detail.Name?.substring(0, 30) || "Item",
-            price: detail.PriceInRobux || 0,
-            limited: !!(detail.IsLimited || detail.IsLimitedUnique),
-            image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-            link: `https://www.roblox.com/catalog/${id}/item`
-          };
-        }
-      } catch {
-        return null;
+        const item = {
+          name: detail.Name || "Unknown Item",
+          price: detail.PriceInRobux || 0,
+          limited: detail.IsLimited || detail.IsLimitedUnique || false,
+          image: thumb?.imageUrl || "https://via.placeholder.com/150?text=?",
+          link: `https://www.roblox.com/catalog/${id}/item`
+        };
+
+        totalValue += item.price;
+        result.push(item);
+
+      } catch (itemErr) {
+        console.log(`Item ${id} skipped:`, itemErr.message);
+        // Skip failed items, don't crash
       }
-    });
+    }
 
-    const allItems = (await Promise.all(itemPromises)).filter(Boolean);
-    const totalValue = allItems.reduce((sum, item) => sum + (item.price || 0), 0);
+    // CREATE HASH
+    const itemsData = JSON.stringify(result.sort((a,b) => b.price - a.price));
+    const newHash = crypto.createHash('md5').update(itemsData).digest('hex').slice(0, 16);
 
-    // HASH & CACHE
-    const itemsString = JSON.stringify(allItems);
-    const newHash = crypto.createHash('md5').update(itemsString).digest('hex').slice(0, 12);
-
+    // UPDATE ONLY IF CHANGED
     if (newHash !== cachedData.itemsHash) {
-      cachedData.items = allItems;
+      cachedData.items = result;
       cachedData.itemsHash = newHash;
       cachedData.totalValue = totalValue;
       cachedData.lastItemsFingerprint = fingerprint;
       cachedData.lastUpdate = now;
 
-      const broadcastData = { items: allItems, itemsHash: newHash, totalValue };
-      wss.clients.forEach(client => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(broadcastData));
-        }
+      broadcast({
+        items: result,
+        itemsHash: newHash,
+        totalValue: totalValue
       });
-      
-      console.log(`✅ FULL ITEMS: ${allItems.length} | Value: ${totalValue.toLocaleString()} R$`);
+      console.log(`🔄 ITEMS CHANGED! New: ${result.length} items, Hash: ${newHash}`);
     }
 
-    res.json({ items: allItems, itemsHash: newHash, totalValue });
-
-  } catch (error) {
     res.json({
+      items: result,
+      itemsHash: newHash,
+      totalValue: totalValue
+    });
+
+  } catch (err) {
+    console.error("Items error:", err.message);
+    res.status(200).json({  // Always return 200 with cache
       items: cachedData.items,
-      itemsHash: cachedData.itemsHash || 'error',
-      totalValue: cachedData.totalValue || 0
+      itemsHash: cachedData.itemsHash,
+      totalValue: cachedData.totalValue
     });
   }
 });
 
-// WEBSOCKET
+// 🔥 WEBSOCKET BROADCAST
+function broadcast(data) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      try {
+        client.send(JSON.stringify(data));
+      } catch (err) {
+        console.error("Broadcast error:", err.message);
+      }
+    }
+  });
+}
+
+// 🔥 WEBSOCKET CONNECTION
 wss.on('connection', (ws) => {
-  console.log('👤 Connected');
+  console.log('👤 WebSocket client connected');
+  
   ws.send(JSON.stringify({
     stats: cachedData.stats,
     items: cachedData.items,
     itemsHash: cachedData.itemsHash,
     totalValue: cachedData.totalValue
   }));
-  ws.on('close', () => console.log('👋 Disconnected'));
+
+  ws.on('close', () => {
+    console.log('👋 WebSocket client disconnected');
+  });
+  
+  ws.on('error', (err) => {
+    console.error('WS error:', err.message);
+  });
 });
 
-// BACKGROUND
-setInterval(() => {
-  cachedData.lastUpdate = Date.now() - 25000;
-}, 90000);
+// 🔥 FIXED SMART AUTO UPDATE - NO LOCALHOST CALLS
+setInterval(async () => {
+  console.log('🔄 SMART CHECK: Background update...');
+  try {
+    // Update stats
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api')?.handle?.call(app, {
+      url: '/api',
+      query: { _t: Date.now() }
+    }, {
+      json: data => cachedData.stats = data
+    });
+    
+    // Lightweight items check
+    await app._router.stack.find(layer => layer.route && layer.route.path === '/api/items')?.handle?.call(app, {
+      url: '/api/items',
+      query: { checkOnly: true, _t: Date.now() }
+    }, {
+      json: () => {}
+    });
+    
+    console.log('✅ Background check complete');
+  } catch (err) {
+    console.error('Background check failed:', err.message);
+  }
+}, 60000);
 
-// ROUTING
+// 🔥 SPA ROUTING
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// 🔥 HEALTH CHECK
 app.get('/health', (req, res) => {
   res.json({ 
-    status: 'LIVE', 
-    stats: cachedData.stats,
-    items: cachedData.items.length,
-    userId: USER_ID
+    status: 'OK', 
+    timestamp: Date.now(),
+    itemsHash: cachedData.itemsHash,
+    itemsCount: cachedData.items.length,
+    clients: wss.clients.size,
+    uptime: process.uptime()
   });
 });
 
+// 🔥 SERVER START
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 LIVE on ${PORT}`);
-  console.log(`👤 User ID: ${USER_ID}`);
-  console.log('✅ Stats + 3D GLB + ALL Items!');
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log(`📡 WebSocket ready`);
+  console.log('✅ FIXED: No more JSON errors!');
+  console.log('🧠 SMART MODE: Items update only on CHANGE');
 });
 
-// NO CRASH
-process.on('uncaughtException', () => {});
-process.on('unhandledRejection', () => {});
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('🛑 Shutting down gracefully...');
+  server.close(() => {
+    process.exit(0);
+  });
+});
+
+process.on('uncaughtException', (err) => {
+  console.error('Uncaught Exception:', err.message);
+  process.exit(1);
+});
