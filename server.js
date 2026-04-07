@@ -4,180 +4,162 @@ const path = require("path");
 const http = require("http");
 const WebSocket = require("ws");
 
-const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
+const fetch = require('node-fetch');
 
 const app = express();
-app.use(cors({ origin: "*" }));
+app.use(cors());
 app.use(express.static(path.join(__dirname, "public")));
+app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ server });
 
 const USER_ID = 8941948601;
-let cache = { equipped: [], stats: {}, lastUpdate: 0 };
-const CACHE_TIME = 15000; // 15s
 
-async function robloxFetch(url) {
+// Cache
+let cache = {
+  equipped: [],
+  avatar: '',
+  stats: { friends: 0, followers: 0, following: 0 },
+  timestamp: 0
+};
+
+// Simple fetch wrapper
+async function fetchRoblox(url) {
   try {
-    const controller = new AbortController();
-    setTimeout(() => controller.abort(), 10000);
-    
-    const res = await fetch(url, {
-      headers: { 
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        'Accept': 'application/json'
+    const response = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
       },
-      signal: controller.signal
+      timeout: 8000
     });
-    return res.ok ? await res.json() : {};
+    if (response.ok) {
+      return await response.json();
+    }
   } catch (e) {
-    return {};
+    console.log(`Fetch failed: ${url}`);
   }
+  return null;
 }
 
-// 🔥 ALL EQUIPPED ITEMS - COMPLETE & FIXED
+// 🔥 EQUIPPED ITEMS - SIMPLIFIED & STABLE
 app.get("/api/equipped", async (req, res) => {
   const now = Date.now();
-  if (now - cache.lastUpdate < CACHE_TIME && cache.equipped.length) {
-    return res.json({ items: cache.equipped });
+  if (now - cache.timestamp < 20000 && cache.equipped.length > 0) {
+    res.json({ items: cache.equipped });
+    return;
   }
 
+  console.log('Loading equipped items...');
+
   try {
-    console.log('🔄 Fetching equipped items...');
-    
-    // Get avatar outfit (currently wearing)
-    const wearing = await robloxFetch(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
-    const assetIds = wearing.assets?.map(a => a.id) || [];
+    // Method 1: Try outfit endpoint
+    let wearing = await fetchRoblox(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`) || {};
+    let assetIds = wearing.assets ? wearing.assets.map(a => a.id) : [];
 
-    console.log(`📦 Found ${assetIds.length} equipped items`);
-
+    // Method 2: Fallback to currently-wearing
     if (!assetIds.length) {
-      cache.equipped = [];
-      cache.lastUpdate = now;
-      return res.json({ items: [] });
+      wearing = await fetchRoblox(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`) || {};
+      assetIds = wearing.assetIds || [];
     }
 
-    // Batch get details (max 20 items)
-    const ids = assetIds.slice(0, 20).join(',');
-    const [thumbnails, details] = await Promise.all([
-      robloxFetch(`https://thumbnails.roblox.com/v1/assets?assetIds=${ids}&size=150x150&format=Png`),
-      robloxFetch(`https://catalog.roblox.com/v1/catalog/assets/details?assetIds=${ids}`)
-    ]);
+    console.log(`Found ${assetIds.length} assets`);
 
     const items = [];
-    details.data?.slice(0, 20).forEach((detail) => {
-      const thumb = thumbnails.data?.find(t => t.targetId == detail.id);
-      items.push({
-        id: detail.id,
-        name: detail.name || `Item #${detail.id}`,
-        limited: detail.isLimited || detail.isLimitedUnique || false,
-        image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${detail.id}&width=150&height=150&format=png`,
-        link: `https://www.roblox.com/catalog/${detail.id}/item`,
-        type: detail.assetType?.name || 'Unknown'
-      });
-    });
+    
+    // Process max 12 items
+    for (let i = 0; i < Math.min(assetIds.length, 12); i++) {
+      const id = assetIds[i];
+      try {
+        const detail = await fetchRoblox(`https://economy.roblox.com/v2/assets/${id}/details`) || {};
+        const name = detail.Name || `Item #${id}`;
+        
+        items.push({
+          id: id,
+          name: name.substring(0, 20),
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
+          link: `https://www.roblox.com/catalog/${id}/item`,
+          limited: detail.IsLimited || false
+        });
+      } catch (e) {
+        // Fallback item
+        items.push({
+          id: id,
+          name: `Equipped #${i + 1}`,
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
+          link: `https://www.roblox.com/catalog/${id}/item`,
+          limited: false
+        });
+      }
+    }
 
     cache.equipped = items;
-    cache.lastUpdate = now;
-    broadcast({ equipped: { items } });
+    cache.timestamp = now;
     
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ equipped: { items } }));
+      }
+    });
+
     console.log(`✅ Loaded ${items.length} items`);
     res.json({ items });
   } catch (err) {
     console.error('Equipped error:', err);
-    res.status(500).json({ items: cache.equipped });
+    res.json({ items: cache.equipped });
   }
 });
 
-// 🔥 REAL 3D AVATAR - Multiple Angles
-app.get("/api/avatar3d", async (req, res) => {
-  const angle = parseInt(req.query.angle) || 0;
-  const size = 420;
-  
-  // Roblox avatar-headshot for 3D effect
-  const imageUrl = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${USER_ID}&size=${size}x${size}&format=Png&isCircular=false`;
-  
-  res.json({ image: imageUrl });
+// 🔥 AVATAR - DIRECT URL
+app.get("/api/avatar", async (req, res) => {
+  const avatarUrl = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`;
+  cache.avatar = avatarUrl;
+  res.json({ image: avatarUrl });
 });
 
 // 🔥 STATS
 app.get("/api/stats", async (req, res) => {
   try {
     const [friends, followers, following] = await Promise.all([
-      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      robloxFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+      fetchRoblox(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      fetchRoblox(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      fetchRoblox(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
     ]);
 
     const stats = {
-      friends: friends.count || 0,
-      followers: followers.count || 0,
-      following: following.count || 0
+      friends: friends?.count || 0,
+      followers: followers?.count || 0,
+      following: following?.count || 0
     };
 
     cache.stats = stats;
-    broadcast({ stats });
     res.json(stats);
-  } catch (err) {
-    console.error('Stats error:', err);
-    res.json(cache.stats || { friends: 0, followers: 0, following: 0 });
+  } catch {
+    res.json(cache.stats);
   }
 });
 
-function broadcast(data) {
-  try {
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(data));
-      }
-    });
-  } catch (e) {}
-}
-
+// WebSocket
 wss.on('connection', (ws) => {
-  console.log('👤 Client connected');
   ws.send(JSON.stringify(cache));
-  
-  ws.on('close', () => {
-    console.log('👋 Client disconnected');
-  });
-  ws.on('error', () => {}); // Silent WS errors
 });
 
-// 🔥 NO LOCALHOST CALLS - FIXED FOR RAILWAY
-// Auto refresh directly (no http calls)
-setInterval(async () => {
-  console.log('🔄 Auto refresh...');
-  try {
-    // Direct refresh without localhost
-    await app._router.stack[0].handle({ method: 'GET', url: '/api/equipped' }, {
-      json: (data) => {},
-      end: () => {}
-    }, () => {});
-  } catch (e) {
-    console.log('Auto refresh skipped');
-  }
-}, 15000);
-
-// SPA Routing
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// Routes
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// Health check
+// Health
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', cache: cache.equipped.length });
+  res.json({ ok: true, items: cache.equipped.length });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('✅ Railway FIXED - No localhost calls!');
+  console.log(`🚀 Server on ${PORT}`);
 });
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  server.close(() => {
-    process.exit(0);
-  });
-});
+// Auto refresh - NO LOCALHOST
+setInterval(async () => {
+  await app._router.handle({ method: 'GET', url: '/api/equipped' }, {}, () => {});
+}, 30000);
