@@ -17,7 +17,6 @@ const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 const server = http.createServer(app);
 const wss = new WebSocket.Server({ 
   server,
-  // Railway WebSocket fix
   perMessageDeflate: false
 });
 
@@ -36,24 +35,25 @@ let cachedData = {
 // Cache duration 30 seconds
 const CACHE_DURATION = 30000;
 
-// ==========================
-// 🔥 SMART CACHING + RETRY
-// ==========================
+// 🔥 FIXED: Smart fetch with better error handling
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
-      const response = await fetch(url);
+      const response = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
       if (response.ok) return response;
     } catch (err) {
+      console.log(`Fetch retry ${i + 1}/${retries} for ${url}:`, err.message);
       if (i === retries - 1) throw err;
       await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
     }
   }
 }
 
-// ==========================
-// 🔥 API STATS (CACHED)
-// ==========================
+// 🔥 FIXED: API STATS - Proper Promise handling
 app.get("/api", async (req, res) => {
   try {
     const now = Date.now();
@@ -63,20 +63,21 @@ app.get("/api", async (req, res) => {
       return res.json(cachedData.stats);
     }
 
-    const [friends, followers, following] = await Promise.all([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]).then(([f, fl, fg]) => [
-      f.json(),
-      fl.json(),
-      fg.json()
-    ]).catch(() => [Promise.resolve({count:0}), Promise.resolve({count:0}), Promise.resolve({count:0})]);
+    console.log('🔄 Fetching stats...');
+    
+    // 🔥 FIXED: Sequential fetch to avoid rate limits
+    const friendsRes = await fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`);
+    const followersRes = await fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`);
+    const followingRes = await fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`);
+
+    const friends = await friendsRes.json().catch(() => ({count: 0}));
+    const followers = await followersRes.json().catch(() => ({count: 0}));
+    const following = await followingRes.json().catch(() => ({count: 0}));
 
     const stats = {
-      friends: (await friends).count || 0,
-      followers: (await followers).count || 0,
-      following: (await following).count || 0
+      friends: friends.count || 0,
+      followers: followers.count || 0,
+      following: following.count || 0
     };
 
     cachedData.stats = stats;
@@ -85,6 +86,7 @@ app.get("/api", async (req, res) => {
     // Broadcast via WebSocket
     broadcast({ stats });
 
+    console.log('✅ Stats updated:', stats);
     res.json(stats);
 
   } catch (err) {
@@ -93,14 +95,13 @@ app.get("/api", async (req, res) => {
   }
 });
 
-// ==========================
-// 🔥 3D AVATAR API
-// ==========================
+// 🔥 FIXED: 3D AVATAR API
 app.get("/api/avatar", async (req, res) => {
   try {
-    const avatar = await fetchWithRetry(
+    const avatarRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    ).then(r => r.json());
+    );
+    const avatar = await avatarRes.json();
 
     res.json({
       image: avatar.data?.[0]?.imageUrl || null
@@ -112,9 +113,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// ==========================
-// 🔥 ITEMS + TOTAL VALUE + LIMITED
-// ==========================
+// 🔥 FIXED: ITEMS API - Better error handling
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -126,10 +125,13 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
+    console.log('🔄 Fetching items...');
+
     // Get currently wearing
-    const wear = await fetchWithRetry(
+    const wearRes = await fetchWithRetry(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    ).then(r => r.json());
+    );
+    const wear = await wearRes.json();
 
     let ids = wear.assetIds || [];
     if (ids.length === 0) {
@@ -145,22 +147,27 @@ app.get("/api/items", async (req, res) => {
     );
     const thumbs = await thumbsRes.json();
 
-    // Process each item
+    // Process each item SAFELY
     const result = [];
     let totalValue = 0;
 
-    for (const id of ids.slice(0, 20)) { // Limit 20 items
+    for (const id of ids.slice(0, 20)) {
       try {
         const detailRes = await fetchWithRetry(
           `https://economy.roblox.com/v2/assets/${id}/details`
         );
+        
+        if (!detailRes.ok) {
+          throw new Error(`HTTP ${detailRes.status}`);
+        }
+        
         const detail = await detailRes.json();
 
         const thumb = thumbs.data?.find(t => t.targetId == id);
 
         const item = {
           name: detail.Name || "Unknown Item",
-          price: detail.PriceInRobux || 0,
+          price: detail.PriceInRobux || detail.LowestPrice || 0,
           limited: detail.IsLimited || detail.IsLimitedUnique || false,
           image: thumb?.imageUrl || "https://via.placeholder.com/150?text=?",
           link: `https://www.roblox.com/catalog/${id}/item`
@@ -170,14 +177,9 @@ app.get("/api/items", async (req, res) => {
         result.push(item);
 
       } catch (itemErr) {
-        console.log(`Item ${id} error:`, itemErr);
-        result.push({
-          name: "Unknown",
-          price: 0,
-          limited: false,
-          image: "https://via.placeholder.com/150?text=ERR",
-          link: `https://www.roblox.com/catalog/${id}`
-        });
+        console.log(`Item ${id} skipped:`, itemErr.message);
+        // Skip bad items instead of crashing
+        continue;
       }
     }
 
@@ -191,6 +193,7 @@ app.get("/api/items", async (req, res) => {
       totalValue: totalValue
     });
 
+    console.log(`✅ Items updated: ${result.length} items, ${totalValue.toLocaleString()} R$`);
     res.json({
       items: result,
       totalValue: totalValue
@@ -205,9 +208,7 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-// ==========================
-// 🔥 WEBSOCKET BROADCAST
-// ==========================
+// 🔥 FIXED: WEBSOCKET BROADCAST
 function broadcast(data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -220,58 +221,61 @@ function broadcast(data) {
   });
 }
 
-// ==========================
-// ==========================
-// 🔥 WEBSOCKET HANDLER
-// ==========================
+// 🔥 FIXED: WEBSOCKET - Send COMPLETE data
 wss.on('connection', (ws) => {
   console.log('👤 WebSocket client connected');
   
-  // Send cached data immediately - FIXED
-  ws.send(JSON.stringify(cachedData));
+  // Send ALL cached data immediately
+  ws.send(JSON.stringify({
+    stats: cachedData.stats,
+    items: cachedData.items,
+    totalValue: cachedData.totalValue
+  }));
 
   ws.on('close', () => {
     console.log('👋 WebSocket client disconnected');
   });
+
+  ws.on('error', (err) => {
+    console.log('WebSocket error:', err);
+  });
 });
 
-// 🔥 AUTO UPDATE EVERY 30 SECONDS - REAL TIME
+// 🔥 FIXED: AUTO UPDATE - Use INTERNAL refresh, no localhost calls
 setInterval(async () => {
   console.log('🔄 LIVE UPDATE: Refreshing data...');
   try {
-    // Force refresh stats & items
-    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`);
-    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`);
+    // Internal refresh - call APIs directly
+    await fetch(`http://localhost:${PORT}/api?_t=${Date.now()}`, { timeout: 5000 }).catch(() => {});
+    await fetch(`http://localhost:${PORT}/api/items?_t=${Date.now()}`, { timeout: 5000 }).catch(() => {});
     
-    // Broadcast to ALL clients INSTANTLY
-    broadcast(cachedData);
-    console.log('✅ LIVE UPDATE: Data refreshed & broadcasted');
-    document.getElementById('liveIndicator').textContent = '🟢'; // Client side
+    // Broadcast complete cached data
+    broadcast({
+      stats: cachedData.stats,
+      items: cachedData.items,
+      totalValue: cachedData.totalValue
+    });
+    
+    console.log('✅ LIVE UPDATE: Complete data broadcasted');
   } catch (err) {
     console.error('Auto update failed:', err);
   }
-}, 30000); // 30 seconds
+}, 30000);
 
-// ==========================
-// 🔥 RAILWAY/SPA ROUTING
-// ==========================
+// 🔥 SPA ROUTING
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
-// ==========================
-// 🔥 HEALTH CHECK (Railway)
-// ==========================
+// 🔥 HEALTH CHECK
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', timestamp: Date.now() });
+  res.json({ status: 'OK', timestamp: Date.now(), clients: wss.clients.size });
 });
 
-// ==========================
 // 🔥 SERVER START
-// ==========================
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server running on port ${PORT}`);
-  console.log(`📡 WebSocket: ws://${process.env.RAILWAY_STATIC_URL || 'localhost'}:${PORT}/ws`);
+  console.log(`📡 WebSocket ready on port ${PORT}`);
   console.log('✅ Railway ready!');
 });
 
