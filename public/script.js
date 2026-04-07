@@ -1,57 +1,141 @@
 class PortfolioApp {
   constructor() {
     this.ws = null;
-    this.lastStats = { friends: 0, followers: 0, following: 0 };
-    this.lastItems = [];
+    this.avatarCtx = null;
+    this.avatarImg = null;
+    this.isDragging = false;
+    this.lastX = 0;
+    this.lastY = 0;
+    this.rotationX = 0;
+    this.rotationY = 0;
+    this.targetRotationX = 0;
+    this.targetRotationY = 0;
     this.retryCount = 0;
     this.init();
   }
 
   init() {
-  this.connectWebSocket();
-  this.loadStats();
-  this.loadAvatar();
-  this.loadItems();  // 🔥 CRITICAL: Load items on start
-  this.addInteractions();
-}
-
-  // 🔥 CHANGE DETECTION - NO AUTO REFRESH
-  hasDataChanged(newData, oldData) {
-    if (!newData || !oldData) return true;
-    
-    if (newData.stats) {
-      return newData.stats.friends !== this.lastStats.friends ||
-             newData.stats.followers !== this.lastStats.followers ||
-             newData.stats.following !== this.lastStats.following;
-    }
-    
-    if (newData.items) {
-      return JSON.stringify(newData.items) !== JSON.stringify(this.lastItems);
-    }
-    
-    return false;
+    this.setupCanvas();
+    this.loadAvatar3D();
+    this.connectWebSocket();
+    this.loadStats();
+    this.loadItems();
+    this.addInteractions();
   }
 
-  // 🔥 SIMPLE AVATAR
-  async loadAvatar() {
+  setupCanvas() {
+    const canvas = document.getElementById('avatar3D');
+    this.avatarCtx = canvas.getContext('2d');
+    
+    // Drag events
+    canvas.addEventListener('mousedown', (e) => this.startDrag(e));
+    canvas.addEventListener('mousemove', (e) => this.drag(e));
+    canvas.addEventListener('mouseup', () => this.stopDrag());
+    canvas.addEventListener('mouseleave', () => this.stopDrag());
+    
+    // Touch support
+    canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
+    canvas.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
+    canvas.addEventListener('touchend', () => this.stopDrag());
+  }
+
+  startDrag(e) {
+    this.isDragging = true;
+    this.lastX = e.clientX;
+    this.lastY = e.clientY;
+    document.body.style.cursor = 'grabbing';
+  }
+
+  drag(e) {
+    if (!this.isDragging) return;
+    
+    const deltaX = e.clientX - this.lastX;
+    const deltaY = e.clientY - this.lastY;
+    
+    this.targetRotationY += deltaX * 0.5;
+    this.targetRotationX -= deltaY * 0.5;
+    
+    this.lastX = e.clientX;
+    this.lastY = e.clientY;
+  }
+
+  stopDrag() {
+    this.isDragging = false;
+    document.body.style.cursor = 'grab';
+  }
+
+  // 🔥 3D AVATAR 360° RENDER
+  async loadAvatar3D() {
     try {
       const res = await this.fetchWithRetry('/api/avatar');
       const data = await res.json();
-      const img = document.getElementById('avatarImg');
-      img.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
-      img.onerror = () => img.src = 'https://via.placeholder.com/180?text=ROBLOX';
+      this.avatarImg = new Image();
+      this.avatarImg.crossOrigin = 'anonymous';
+      this.avatarImg.onload = () => this.animate3D();
+      this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
     } catch (err) {
-      console.error('Avatar failed:', err);
+      console.error('Avatar load failed:', err);
+      this.avatarImg = new Image();
+      this.avatarImg.src = 'https://via.placeholder.com/200?text=ROBLOX';
+      this.animate3D();
     }
   }
 
-  // 🔥 WEBSOCKET - UPDATE ONLY ON CHANGE
+  animate3D() {
+    const canvas = document.getElementById('avatar3D');
+    
+    function render() {
+      const ctx = canvas.getContext('2d');
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      
+      // Smooth rotation
+      app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
+      app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
+      
+      // Auto rotate when not dragging
+      if (!app.isDragging) {
+        app.targetRotationY += 0.3;
+      }
+      
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      
+      // 3D transformations
+      ctx.rotate(app.rotationY * 0.01);
+      ctx.scale(1.1, 0.95);
+      
+      // Lighting effect
+      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
+      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
+      gradient.addColorStop(1, 'transparent');
+      ctx.fillStyle = gradient;
+      ctx.fillRect(-90, -90, 180, 180);
+      
+      // Shadow
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 20;
+      ctx.shadowOffsetX = 10;
+      ctx.shadowOffsetY = 10;
+      
+      // Draw avatar
+      if (app.avatarImg.complete) {
+        ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
+      }
+      
+      ctx.restore();
+      requestAnimationFrame(render);
+    }
+    render();
+  }
+
+  // 🔥 WEBSOCKET REAL-TIME UPDATE
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected');
+      console.log('✅ LIVE: WebSocket connected');
       document.getElementById('liveIndicator').textContent = '🟢';
       this.retryCount = 0;
     };
@@ -59,16 +143,14 @@ class PortfolioApp {
     this.ws.onmessage = (event) => {
       try {
         const data = JSON.parse(event.data);
-        if (this.hasDataChanged(data, this.lastStats) || this.hasDataChanged(data, this.lastItems)) {
-          this.updateLiveData(data);
-        }
+        this.updateLiveData(data);
       } catch (err) {
         console.error('WS parse error:', err);
       }
     };
 
     this.ws.onclose = () => {
-      console.log('❌ WebSocket disconnected');
+      console.log('❌ LIVE: WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
       this.smartReconnect();
     };
@@ -79,26 +161,21 @@ class PortfolioApp {
       setTimeout(() => {
         this.retryCount++;
         this.connectWebSocket();
-      }, 3000 * this.retryCount);
+      }, 2000 * this.retryCount);
     }
   }
 
   updateLiveData(data) {
     if (data.stats) {
-      this.animate(document.getElementById("friends"), data.stats.friends || 0);
-      this.animate(document.getElementById("followers"), data.stats.followers || 0);
-      this.animate(document.getElementById("following"), data.stats.following || 0);
-      
-      this.lastStats = {
-        friends: data.stats.friends || 0,
-        followers: data.stats.followers || 0,
-        following: data.stats.following || 0
-      };
+      this.animate(document.getElementById("friends"), data.stats.friends);
+      this.animate(document.getElementById("followers"), data.stats.followers);
+      this.animate(document.getElementById("following"), data.following);
     }
     
     if (data.items) {
-      this.renderItems(data.items || []);
-      this.lastItems = data.items || [];
+      this.renderItems(data.items);
+      document.getElementById("totalValue").textContent = 
+        `${data.totalValue?.toLocaleString() || 0} R$`;
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
@@ -126,7 +203,6 @@ class PortfolioApp {
       this.animate(document.getElementById("friends"), data.friends || 0);
       this.animate(document.getElementById("followers"), data.followers || 0);
       this.animate(document.getElementById("following"), data.following || 0);
-      this.lastStats = data;
     } catch (err) {
       console.error('Stats failed:', err);
     }
@@ -134,7 +210,7 @@ class PortfolioApp {
 
   async loadItems() {
     const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(12).fill().map(() => 
+    container.innerHTML = Array(8).fill().map(() => 
       '<div class="loading-smooth"></div>'
     ).join('');
 
@@ -142,42 +218,40 @@ class PortfolioApp {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
       this.renderItems(data.items || []);
-      this.lastItems = data.items || [];
+      document.getElementById("totalValue").textContent = 
+        `${(data.totalValue || 0).toLocaleString()} R$`;
     } catch (err) {
       console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Loading...</div>';
     }
   }
 
   renderItems(items) {
     const container = document.getElementById("itemsContainer");
     if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px;min-width:300px">No items equipped</div>';
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
       return;
     }
 
     container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
   }
 
-  getRarity(item) {
-    // FIXED: Use item data instead of price
-    if (item.limited || item.name?.toLowerCase().includes('limited')) return "legendary";
-    if (item.name?.toLowerCase().includes('epic') || item.name?.toLowerCase().includes('legendary')) return "epic";
-    if (item.name?.toLowerCase().includes('rare') || item.name?.toLowerCase().includes('uncommon')) return "rare";
+  getRarity(price) {
+    if (price > 10000) return "legendary";
+    if (price > 5000) return "epic";
+    if (price > 1000) return "rare";
     return "";
   }
 
   createItemCard(item, index) {
-    const rarity = this.getRarity(item);
-    const name = item.name?.replace(/[\$\$]/g, '') || 'Unknown Item';
-    
+    const rarity = this.getRarity(item.price);
     return `
-      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
-        <img src="${item.image}" 
-             onerror="this.src='https://via.placeholder.com/85x55/333/ccc?text=Item';this.onerror=null"
-             loading="lazy">
-        <div class="item-name">${name}</div>
+        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
+        <div class="item-name">${item.name}</div>
+        <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
     `;
   }
@@ -211,25 +285,14 @@ class PortfolioApp {
           btn.classList.remove('copied');
           btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
         }, 2000);
-      }).catch(() => {
-        // Fallback
-        const textArea = document.createElement('textarea');
-        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
       });
     };
 
-    // Manual refresh button (hidden)
-    document.addEventListener('keydown', (e) => {
-      if (e.ctrlKey && e.key === 'r') {
-        e.preventDefault();
-        this.loadStats();
-        this.loadItems();
-      }
-    });
+    // Auto refresh every 30s
+    setInterval(() => {
+      this.loadItems();
+      this.loadStats();
+    }, 30000);
   }
 }
 
@@ -237,4 +300,5 @@ class PortfolioApp {
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
+  document.getElementById('avatar3D').style.cursor = 'grab';
 });
