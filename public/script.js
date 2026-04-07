@@ -122,20 +122,23 @@ class PortfolioApp {
   }
 
   renderItems(items) {
-    const container = document.getElementById("itemsContainer");
-    if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
-      return;
-    }
-
-    container.innerHTML = items.map((item, i) => `
-      <div class="item-card" onclick="window.open('${item.link || '#'}')">
-        ${i === 0 ? '<div class="equipped">ON</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
-        <div class="item-name">${item.name}</div>
-      </div>
-    `).join('');
+  const container = document.getElementById("itemsContainer");
+  if (!items?.length) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+    return;
   }
+
+  container.innerHTML = items.map((item, i) => `
+    <div class="item-card" onclick="window.open('${item.link}', '_blank')">
+      ${i < 3 ? '<div class="equipped">ON</div>' : ''}
+      <img src="${item.image}" 
+           onerror="this.src='https://via.placeholder.com/90x70/333/fff?text=?'; this.onerror=null"
+           loading="lazy"
+           alt="${item.name}">
+      <div class="item-name">${item.name}</div>
+    </div>
+  `).join('');
+}
 
   animate(el, end) {
     end = Number(end) || 0;
