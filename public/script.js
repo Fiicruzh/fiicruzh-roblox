@@ -1,211 +1,428 @@
-class PortfolioApp {
-  constructor() {
-    this.ws = null;
-    this.currentStats = { friends: -1, followers: -1, following: -1 };
-    this.currentItemsHash = '';
-    this.retryCount = 0;
-    this.init();
-  }
+body{
+  margin:0;
+  font-family:Orbitron;
+  background:black;
+  color:white;
+  overflow-x:hidden;
+}
 
-  init() {
-    this.loadAvatar();
-    this.connectWebSocket();
-    this.loadStats();
-    this.loadItems();
-    this.addInteractions();
-  }
+/* BG */
+.bg{
+  position:fixed;
+  width:100%;
+  height:100%;
+  background:url('https://i.ibb.co.com/9HQCvdjn/1775328895589.png') center/cover;
+  filter:brightness(.3);
+  z-index:-2;
+}
 
-  // Simple avatar load - NO 3D
-  async loadAvatar() {
-    try {
-      const res = await fetch('/api/avatar');
-      const data = await res.json();
-      const img = document.getElementById('avatarImg');
-      img.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
-    } catch (err) {
-      console.error('Avatar load failed:', err);
-    }
-  }
+/* SCANLINE */
+.scanline{
+  position:fixed;
+  width:100%;
+  height:100%;
+  background:repeating-linear-gradient(
+    0deg,
+    rgba(255,255,255,.03) 1px,
+    transparent 2px
+  );
+  animation:scan 6s linear infinite;
+  z-index:-1;
+}
 
-  // 🔥 WEBSOCKET - UPDATE ONLY IF CHANGED
-  connectWebSocket() {
-    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
-    this.ws = new WebSocket(wsUrl);
-    
-    this.ws.onopen = () => {
-      console.log('✅ WebSocket connected');
-      document.getElementById('liveIndicator').textContent = '🟢';
-      this.retryCount = 0;
-    };
+@keyframes scan{
+  to{background-position:0 100%;}
+}
 
-    this.ws.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        this.updateLiveData(data);
-      } catch (err) {
-        console.error('WS parse error:', err);
-      }
-    };
+/* CONTAINER */
+.container{
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  min-height:100vh;
+  padding:20px;
+}
 
-    this.ws.onclose = () => {
-      console.log('❌ WebSocket disconnected');
-      document.getElementById('liveIndicator').textContent = '🔴';
-      this.smartReconnect();
-    };
-  }
+/* CARD */
+.card{
+  width:100%;
+  max-width:360px;
+  padding:22px;
+  border-radius:20px;
+  background:rgba(0,0,0,0.7);
+  backdrop-filter:blur(12px);
+  box-shadow:0 0 50px cyan;
+}
 
-  smartReconnect() {
-    if (this.retryCount < 5) {
-      setTimeout(() => {
-        this.retryCount++;
-        this.connectWebSocket();
-      }, 2000 * this.retryCount);
-    }
-  }
+/* GLITCH TEXT */
+.glitch{
+  position:relative;
+  color:cyan;
+  font-weight:700;
+  text-shadow:0 0 5px cyan;
+}
 
-  // 🔥 UPDATE ONLY IF DATA CHANGED
-  updateLiveData(data) {
-    // Update stats only if changed
-    if (data.stats) {
-      const statsChanged = 
-        data.stats.friends !== this.currentStats.friends ||
-        data.stats.followers !== this.currentStats.followers ||
-        data.stats.following !== this.currentStats.following;
-      
-      if (statsChanged) {
-        this.animate(document.getElementById("friends"), data.stats.friends);
-        this.animate(document.getElementById("followers"), data.stats.followers);
-        this.animate(document.getElementById("following"), data.stats.following);
-        this.currentStats = { ...data.stats };
-      }
-    }
-    
-    // Update items only if changed
-    if (data.items) {
-      const itemsHash = JSON.stringify(data.items);
-      if (itemsHash !== this.currentItemsHash && itemsHash !== '[]') {
-        this.renderItems(data.items);
-        this.currentItemsHash = itemsHash;
-      }
-    }
-    
-    document.getElementById('liveIndicator').textContent = '🟢';
-  }
+.glitch::before,
+.glitch::after{
+  content:attr(data-text);
+  position:absolute;
+  left:0;
+  width:100%;
+  overflow:hidden;
+}
 
-  async fetchWithRetry(url, retries = 3) {
-    for (let i = 0; i < retries; i++) {
-      try {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const res = await fetch(url, { 
-          cache: 'no-store',
-          signal: controller.signal
-        });
-        clearTimeout(timeoutId);
-        
-        if (res.ok) return res;
-      } catch (err) {
-        if (i === retries - 1) throw err;
-        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
-      }
-    }
-  }
+.glitch::before{
+  animation:glitchTop 2s infinite;
+  color:red;
+}
 
-  async loadStats() {
-    try {
-      const res = await this.fetchWithRetry('/api');
-      const data = await res.json();
-      this.animate(document.getElementById("friends"), data.friends || 0);
-      this.animate(document.getElementById("followers"), data.followers || 0);
-      this.animate(document.getElementById("following"), data.following || 0);
-      this.currentStats = { ...data };
-    } catch (err) {
-      console.error('Stats failed:', err);
-    }
-  }
+.glitch::after{
+  animation:glitchBottom 2s infinite;
+  color:blue;
+}
 
-  async loadItems() {
-    const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(8).fill().map(() => 
-      '<div class="loading-smooth"></div>'
-    ).join('');
+@keyframes glitchTop{
+  0%{clip-path:inset(0 0 80% 0);}
+  50%{clip-path:inset(0 0 20% 0);}
+  100%{clip-path:inset(0 0 80% 0);}
+}
 
-    try {
-      const res = await this.fetchWithRetry('/api/items');
-      const data = await res.json();
-      this.renderItems(data.items || []);
-      const itemsHash = JSON.stringify(data.items || []);
-      this.currentItemsHash = itemsHash;
-    } catch (err) {
-      console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
-    }
-  }
+@keyframes glitchBottom{
+  0%{clip-path:inset(80% 0 0 0);}
+  50%{clip-path:inset(20% 0 0 0);}
+  100%{clip-path:inset(80% 0 0 0);}
+}
 
-  renderItems(items) {
-    const container = document.getElementById("itemsContainer");
-    if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
-      return;
-    }
+/* HEADER */
+.header{
+  display:flex;
+  align-items:center;
+  gap:12px;
+}
 
-    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
-  }
+.profile{
+  width:60px;
+  height:60px;
+  border-radius:50%;
+  box-shadow:0 0 15px cyan;
+}
 
-  getRarity(price) {
-    if (price > 10000) return "legendary";
-    if (price > 5000) return "epic";
-    if (price > 1000) return "rare";
-    return "";
-  }
+/* AVATAR SIMPLE */
+.avatar-box{
+  text-align:center;
+  margin-top:12px;
+}
 
-  tampilan grid kartu mini agar bisa di scrol kiri dan kanan
+#avatarImg{
+  width:180px;
+  height:180px;
+  border-radius:12px;
+  box-shadow:0 0 30px cyan;
+  object-fit:cover;
+}
 
-  animate(el, end) {
-    end = Number(end) || 0;
-    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    const duration = 1000;
-    let startTime = null;
+/* BUTTON USERNAME */
+.copy-btn {
+  margin-top: 10px;
+  padding: 12px 18px;
+  background: rgba(0, 255, 255, 0.1);
+  border: 1px solid #0ff;
+  color: #0ff;
+  cursor: pointer;
+  border-radius: 10px;
+  font-family: 'Orbitron', sans-serif;
+  transition: all 0.3s ease;
+  display: inline-block;
+  width:100%;
+  box-sizing:border-box;
+}
 
-    const step = (timestamp) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      const easeProgress = 1 - Math.pow(1 - progress, 3);
-      const value = Math.floor(start + (end - start) * easeProgress);
-      el.textContent = value.toLocaleString();
-      
-      if (progress < 1) requestAnimationFrame(step);
-    };
-    requestAnimationFrame(step);
-  }
+.copy-btn:hover {
+  background: #0ff;
+  color: #000;
+  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
+}
 
-  addInteractions() {
-    // Copy button
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.classList.add('copied');
-        btn.innerHTML = '✅ Copied!';
-        setTimeout(() => {
-          btn.classList.remove('copied');
-          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-        }, 2000);
-      }).catch(() => {
-        // Fallback
-        const textArea = document.createElement('textarea');
-        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      });
-    };
+.copy-btn:active {
+  transform: scale(0.95);
+}
+
+.copy-btn.copied {
+  background: #00ff88;
+  border-color: #00ff88;
+  color: #000;
+  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
+}
+
+/* STATS */
+.stats{
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  margin-top:12px;
+}
+
+.stat{
+  text-align:center;
+  background:rgba(0,255,255,0.1);
+  padding:8px;
+  border-radius:8px;
+  font-size:12px;
+  transition:.3s;
+}
+
+.stat:hover{
+  transform:scale(1.1);
+  box-shadow:0 0 15px cyan;
+}
+
+/* TAG */
+.tagline{
+  text-align:center;
+  margin-top:10px;
+  font-size:13px;
+  color:cyan;
+}
+
+/* ICON */
+.icons{
+  display:flex;
+  justify-content:center;
+  gap:18px;
+  margin-top:12px;
+}
+
+.icons a{
+  font-size:18px;
+  color:cyan;
+  transition:.3s;
+}
+
+.icons a:hover{
+  transform:scale(1.3);
+}
+
+/* BUTTON */
+.btn{
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  gap:8px;
+  padding:11px;
+  border-radius:10px;
+  border:1px solid cyan;
+  color:cyan;
+  text-decoration:none;
+  font-size:13px;
+  transition:.3s;
+}
+
+.btn:hover{
+  background:cyan;
+  color:black;
+}
+
+/* ROW */
+.button-row{
+  display:flex;
+  gap:8px;
+  margin-top:14px;
+}
+
+.main-btn{
+  flex:1;
+}
+
+.qr-btn{
+  width:48px;
+  min-width:48px;
+}
+
+.discord-btn{
+  margin-top:10px;
+}
+
+/* RESPONSIVE */
+@media(max-width:480px){
+  .header{
+    flex-direction:column;
+    text-align:center;
   }
 }
 
-// Global app instance
-let app;
-document.addEventListener('DOMContentLoaded', () => {
-  app = new PortfolioApp();
-});
+/* ===================== */
+/* ROBLOX ITEMS GRID */
+/* ===================== */
+
+.items-section{
+  margin-top:15px;
+}
+
+.items-title{
+  text-align:center;
+  color:cyan;
+  font-size:13px;
+  margin-bottom:8px;
+}
+
+.items-container{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding:8px 0;
+  scrollbar-width: thin;
+  scrollbar-color: cyan transparent;
+  scroll-snap-type: x mandatory;
+  min-height:100px;
+}
+
+.items-container::-webkit-scrollbar {
+  height: 4px;
+}
+
+.items-container::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.items-container::-webkit-scrollbar-thumb {
+  background: cyan;
+  border-radius: 2px;
+}
+
+/* MINI ITEM CARD */
+.item-card{
+  min-width:85px;
+  flex:0 0 85px;
+  background:rgba(0,255,255,0.08);
+  border:1px solid rgba(0,255,255,0.2);
+  border-radius:10px;
+  padding:8px 6px;
+  text-align:center;
+  cursor:pointer;
+  transition:0.3s;
+  scroll-snap-align: center;
+  position:relative;
+  backdrop-filter:blur(10px);
+}
+
+.item-card:hover{
+  transform:scale(1.05) translateY(-5px);
+  box-shadow:0 10px 25px rgba(0,255,255,0.3);
+}
+
+/* GLOW RARITY */
+.item-card.legendary{
+  border-color:gold;
+  box-shadow:0 0 15px rgba(255,215,0,0.5);
+}
+
+.item-card.legendary::before{
+  content:"⭐";
+  position:absolute;
+  top:4px;
+  right:4px;
+  font-size:10px;
+  color:gold;
+  text-shadow:0 0 5px gold;
+}
+
+.item-card.epic{
+  border-color:#8a2be2;
+  box-shadow:0 0 15px rgba(138,43,226,0.5);
+}
+
+.item-card.epic::before{
+  content:"💜";
+  position:absolute;
+  top:4px;
+  right:4px;
+  font-size:10px;
+  color:#8a2be2;
+  text-shadow:0 0 5px #8a2be2;
+}
+
+.item-card.rare{
+  border-color:cyan;
+  box-shadow:0 0 15px rgba(0,255,255,0.4);
+}
+
+.item-card.rare::before{
+  content:"🔷";
+  position:absolute;
+  top:4px;
+  right:4px;
+  font-size:10px;
+  color:cyan;
+  text-shadow:0 0 5px cyan;
+}
+
+/* IMAGE */
+.item-card img{
+  width:100%;
+  height:55px;
+  object-fit:cover;
+  border-radius:6px;
+  margin-bottom:4px;
+}
+
+/* NAME */
+.item-name{
+  font-size:9px;
+  font-weight:500;
+  line-height:1.1;
+  margin-bottom:2px;
+  color:#ccc;
+  white-space:nowrap;
+  overflow:hidden;
+  text-overflow:ellipsis;
+}
+
+/* EQUIPPED */
+.equipped{
+  position:absolute;
+  top:4px;
+  left:4px;
+  font-size:8px;
+  background:lime;
+  color:black;
+  padding:1px 3px;
+  border-radius:3px;
+  font-weight:bold;
+}
+
+/* LOADING */
+.loading-smooth{
+  min-width:85px;
+  flex:0 0 85px;
+  height:90px;
+  border-radius:10px;
+  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  animation:loading-smooth 1.5s ease-in-out infinite;
+  position:relative;
+  overflow:hidden;
+}
+
+.loading-smooth::after{
+  content:"...";
+  position:absolute;
+  top:50%;
+  left:50%;
+  transform:translate(-50%,-50%);
+  font-size:12px;
+  color:#666;
+}
+
+@keyframes loading-smooth{
+  0%,100%{opacity:0.6; transform:scale(1);}
+  50%{opacity:1; transform:scale(1.02);}
+}
+
+#liveIndicator {
+  animation: pulse 2s infinite;
+  font-size:12px;
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
