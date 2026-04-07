@@ -332,23 +332,29 @@ body{
 /* PRICE */
 .item-price{
   font-size:9px;
-  color:#aaa;
+  color:cyan;
 }
 
 /* LIMITED */
 .limited{
   position:absolute;
   top:4px;
-  left:4px;
-  background:gold;
-  color:black;
+  right:4px;
   font-size:8px;
+  background:purple;
   padding:2px 4px;
   border-radius:4px;
 }
 
-/* 🔥 RARITY COLORS */
-.common{ box-shadow:0 0 10px gray; }
-.epic{ box-shadow:0 0 15px purple; }
-.legendary{ box-shadow:0 0 20px orange; }
-.limited{ box-shadow:0 0 20px gold; }
+/* RARITY */
+.item-card.legendary{
+  box-shadow:0 0 15px gold;
+}
+
+.item-card.epic{
+  box-shadow:0 0 15px violet;
+}
+
+.item-card.rare{
+  box-shadow:0 0 15px cyan;
+}
