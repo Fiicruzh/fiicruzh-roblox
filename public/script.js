@@ -1,3 +1,5 @@
+const API = "/api";
+
 async function loadAvatar(){
   try{
     const res = await fetch("/api/avatar");
@@ -6,13 +8,10 @@ async function loadAvatar(){
     if(data.image){
       document.getElementById("avatar").src = data.image;
     }
-
   }catch{
-    console.log("Avatar gagal load");
+    console.log("avatar error");
   }
 }
-
-const API = "/api";
 
 // 🔥 ANIMASI ANGKA (ANTI NaN)
 function animate(el, end){
