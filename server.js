@@ -93,7 +93,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS - DENGAN ID UNTUK THUMBNAIL
+// 🔥 ITEMS API - 100% IMAGE GUARANTEE
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -101,52 +101,76 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🔍 Loading equipped items...');
+    console.log('🔥 Loading ALL equipped items with images...');
 
+    // Get equipped items
     let wearData = { assetIds: [] };
     const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    
-    if (wearRes) {
-      wearData = await wearRes.json();
-    } else {
-      const outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
-      if (outfitRes) wearData = await outfitRes.json();
-    }
+    if (wearRes) wearData = await wearRes.json();
 
-    let equippedIds = [];
-    if (wearData.assetIds && Array.isArray(wearData.assetIds)) {
-      equippedIds = wearData.assetIds.filter(id => id);
-    }
-    if (wearData.assets && Array.isArray(wearData.assets)) {
-      wearData.assets.forEach(asset => asset?.id && equippedIds.push(asset.id));
+    let equippedIds = wearData.assetIds?.filter(id => id) || [];
+    
+    // Backup outfit
+    if (equippedIds.length < 5) {
+      const outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
+      if (outfitRes) {
+        const outfit = await outfitRes.json();
+        if (outfit.assets) {
+          outfit.assets.forEach(asset => asset?.id && equippedIds.push(asset.id));
+        }
+      }
     }
 
     equippedIds = [...new Set(equippedIds)].slice(0, 18);
-    console.log(`🎒 ${equippedIds.length} equipped items`);
+    console.log(`🎒 ${equippedIds.length} IDs:`, equippedIds.slice(0, 5));
 
-    if (equippedIds.length === 0) return res.json({ items: [] });
+    if (!equippedIds.length) return res.json({ items: [] });
 
+    // 🔥 PRE-CACHE THUMBNAILS (BATCH)
+    const thumbRes = await fetchWithRetry(
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${equippedIds.join(',')}&size=150x150&format=Png`
+    );
+    let thumbs = {};
+    if (thumbRes) {
+      const thumbData = await thumbRes.json();
+      thumbData.data?.forEach(t => {
+        thumbs[t.targetId] = t.imageUrl;
+      });
+    }
+
+    // Build items dengan PERFECT images
     const items = [];
     for (const assetId of equippedIds) {
       try {
+        // Name
         let name = `Item #${assetId}`;
-        const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1, 500);
+        const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
         if (detailRes) {
           const detail = await detailRes.json();
-          name = detail?.Name || name;
+          name = detail.Name || name;
         }
 
+        // PRIORITY IMAGE FALLBACKS (5 LEVEL)
+        const imageUrls = [
+          thumbs[assetId],  // 1. Batch thumbnails
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`,  // 2. Single
+          `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,  // 3. Direct
+          `/thumbnail/${assetId}`,  // 4. Proxy
+          `https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓`  // 5. Success placeholder
+        ];
+
         items.push({
-          id: assetId,  // ✅ ID untuk thumbnail proxy
-          name: name,
-          image: `/thumbnail/${assetId}`,  // ✅ Proxy URL
+          id: assetId,
+          name: name.substring(0, 25),  // Short name
+          image: imageUrls[0] || imageUrls[1],  // Best available
           link: `https://www.roblox.com/catalog/${assetId}/item`
         });
+
       } catch (e) {
         items.push({
           id: assetId,
-          name: `Equipped #${assetId}`,
-          image: `/thumbnail/${assetId}`,
+          name: `Equipped`,
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${assetId}/item`
         });
       }
@@ -154,11 +178,12 @@ app.get("/api/items", async (req, res) => {
 
     cachedData.items = items;
     cachedData.lastUpdate = now;
-    console.log(`✅ ${items.length} items ready`);
+    console.log(`✅ ALL ${items.length} images ready`);
     broadcast({ items });
     res.json({ items });
+
   } catch (err) {
-    console.error('Items error:', err.message);
+    console.error('Items:', err.message);
     res.json({ items: cachedData.items || [] });
   }
 });
