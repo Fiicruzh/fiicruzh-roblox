@@ -14,55 +14,23 @@ const wss = new WebSocket.Server({ server });
 
 app.use(express.static(path.join(__dirname, "public")));
 
-// 🔥 USERNAME SUPPORT
-const USERNAME = "dapaarowr4";
-let USER_ID = null;
-
-// 🔥 SMART RETRY FETCH
-async function smartFetch(url, retries = 3){
-  try{
-    const res = await fetch(url);
-    if(!res.ok) throw new Error("fail");
-    return await res.json();
-  }catch{
-    if(retries > 0){
-      await new Promise(r => setTimeout(r, 500));
-      return smartFetch(url, retries - 1);
-    }
-    return null;
-  }
-}
-
-// 🔥 GET USER ID FROM USERNAME
-async function getUserId(){
-  const data = await smartFetch("https://users.roblox.com/v1/usernames/users", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({ usernames:[USERNAME] })
-  });
-
-  if(data?.data?.[0]){
-    USER_ID = data.data[0].id;
-  }
-}
+const USER_ID = 8941948601;
 
 // ==========================
 // 🔥 API STATS
 // ==========================
 app.get("/api", async (req,res)=>{
   try{
-    if(!USER_ID) await getUserId();
-
     const [friends, followers, following] = await Promise.all([
-      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      smartFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).then(r=>r.json()),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).then(r=>r.json()),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r=>r.json())
     ]);
 
     res.json({
-      friends: friends?.count || 0,
-      followers: followers?.count || 0,
-      following: following?.count || 0
+      friends: friends.count || 0,
+      followers: followers.count || 0,
+      following: following.count || 0
     });
 
   }catch{
@@ -71,78 +39,77 @@ app.get("/api", async (req,res)=>{
 });
 
 // ==========================
-// 🔥 AVATAR
+// 🔥 AVATAR AUTO
 // ==========================
 app.get("/api/avatar", async (req,res)=>{
-  if(!USER_ID) await getUserId();
+  try{
+    const avatar = await fetch(
+      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
+    ).then(r=>r.json());
 
-  const avatar = await smartFetch(
-    `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png`
-  );
+    res.json({
+      image: avatar.data?.[0]?.imageUrl
+    });
 
-  res.json({
-    image: avatar?.data?.[0]?.imageUrl || null
-  });
+  }catch{
+    res.json({image:null});
+  }
 });
 
 // ==========================
-// 🔥 ITEMS + TOTAL PRICE
+// 🔥 ITEMS (FIX + PRICE + LIMITED)
 // ==========================
 app.get("/api/items", async (req,res)=>{
-  if(!USER_ID) await getUserId();
-
-  const wear = await smartFetch(
-    `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-  );
-
-  const ids = wear?.assetIds || [];
-
-  if(!ids.length) return res.json({items:[], total:0});
-
-  const thumbs = await smartFetch(
-    `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}`
-  );
-
-  let total = 0;
-  const result = [];
-
-  for(const id of ids){
-    const detail = await smartFetch(
-      `https://economy.roblox.com/v2/assets/${id}/details`
-    );
-
-    const thumb = thumbs?.data?.find(t => t.targetId === id);
-
-    const price = detail?.PriceInRobux || 0;
-    total += price;
-
-    result.push({
-      name: detail?.Name || "Unknown",
-      price,
-      limited: detail?.IsLimited || detail?.IsLimitedUnique || false,
-      image: thumb?.imageUrl || "",
-      link: `https://www.roblox.com/catalog/${id}`
-    });
-  }
-
-  res.json({items:result, total});
-});
-
-// ==========================
-// 🔥 WEBSOCKET REALTIME
-// ==========================
-wss.on("connection", (ws)=>{
-  console.log("Client connected");
-
-  setInterval(async ()=>{
-    if(!USER_ID) await getUserId();
-
-    const wear = await smartFetch(
+  try{
+    const wear = await fetch(
       `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    );
+    ).then(r=>r.json());
 
-    ws.send(JSON.stringify(wear));
-  }, 5000);
+    let ids = wear.assetIds || [];
+
+    if(ids.length === 0){
+      return res.json([]);
+    }
+
+    const thumbs = await fetch(
+      `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
+    ).then(r=>r.json());
+
+    const result = [];
+
+    for(const id of ids){
+      try{
+        const detail = await fetch(
+          `https://economy.roblox.com/v2/assets/${id}/details`
+        ).then(r=>r.json());
+
+        const thumb = thumbs.data?.find(t => t.targetId === id);
+
+        result.push({
+          name: detail.Name || "Unknown",
+          price: detail.PriceInRobux || 0,
+          limited: detail.IsLimited || detail.IsLimitedUnique || false,
+          image: thumb?.imageUrl || "https://via.placeholder.com/150",
+          link: `https://www.roblox.com/catalog/${id}`
+        });
+
+      }catch{
+        result.push({
+          name:"Unknown",
+          price:0,
+          limited:false,
+          image:"https://via.placeholder.com/150",
+          link:"#"
+        });
+      }
+    }
+
+    res.json(result);
+
+  }catch(err){
+    console.log("ITEM ERROR:", err);
+    res.json([]);
+  }
 });
 
 // ==========================
