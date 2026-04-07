@@ -1,428 +1,239 @@
-body{
-  margin:0;
-  font-family:Orbitron;
-  background:black;
-  color:white;
-  overflow-x:hidden;
-}
+class PortfolioApp {
+  constructor() {
+    this.ws = null;
+    this.lastStats = { friends: 0, followers: 0, following: 0 };
+    this.lastItems = [];
+    this.retryCount = 0;
+    this.init();
+  }
 
-/* BG */
-.bg{
-  position:fixed;
-  width:100%;
-  height:100%;
-  background:url('https://i.ibb.co.com/9HQCvdjn/1775328895589.png') center/cover;
-  filter:brightness(.3);
-  z-index:-2;
-}
+  init() {
+    this.connectWebSocket();
+    this.loadStats();
+    this.loadAvatar();
+    this.addInteractions();
+  }
 
-/* SCANLINE */
-.scanline{
-  position:fixed;
-  width:100%;
-  height:100%;
-  background:repeating-linear-gradient(
-    0deg,
-    rgba(255,255,255,.03) 1px,
-    transparent 2px
-  );
-  animation:scan 6s linear infinite;
-  z-index:-1;
-}
+  // 🔥 CHANGE DETECTION - NO AUTO REFRESH
+  hasDataChanged(newData, oldData) {
+    if (!newData || !oldData) return true;
+    
+    if (newData.stats) {
+      return newData.stats.friends !== this.lastStats.friends ||
+             newData.stats.followers !== this.lastStats.followers ||
+             newData.stats.following !== this.lastStats.following;
+    }
+    
+    if (newData.items) {
+      return JSON.stringify(newData.items) !== JSON.stringify(this.lastItems);
+    }
+    
+    return false;
+  }
 
-@keyframes scan{
-  to{background-position:0 100%;}
-}
+  // 🔥 SIMPLE AVATAR
+  async loadAvatar() {
+    try {
+      const res = await this.fetchWithRetry('/api/avatar');
+      const data = await res.json();
+      const img = document.getElementById('avatarImg');
+      img.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
+      img.onerror = () => img.src = 'https://via.placeholder.com/180?text=ROBLOX';
+    } catch (err) {
+      console.error('Avatar failed:', err);
+    }
+  }
 
-/* CONTAINER */
-.container{
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  min-height:100vh;
-  padding:20px;
-}
+  // 🔥 WEBSOCKET - UPDATE ONLY ON CHANGE
+  connectWebSocket() {
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
+    this.ws = new WebSocket(wsUrl);
+    
+    this.ws.onopen = () => {
+      console.log('✅ WebSocket connected');
+      document.getElementById('liveIndicator').textContent = '🟢';
+      this.retryCount = 0;
+    };
 
-/* CARD */
-.card{
-  width:100%;
-  max-width:360px;
-  padding:22px;
-  border-radius:20px;
-  background:rgba(0,0,0,0.7);
-  backdrop-filter:blur(12px);
-  box-shadow:0 0 50px cyan;
-}
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        if (this.hasDataChanged(data, this.lastStats) || this.hasDataChanged(data, this.lastItems)) {
+          this.updateLiveData(data);
+        }
+      } catch (err) {
+        console.error('WS parse error:', err);
+      }
+    };
 
-/* GLITCH TEXT */
-.glitch{
-  position:relative;
-  color:cyan;
-  font-weight:700;
-  text-shadow:0 0 5px cyan;
-}
+    this.ws.onclose = () => {
+      console.log('❌ WebSocket disconnected');
+      document.getElementById('liveIndicator').textContent = '🔴';
+      this.smartReconnect();
+    };
+  }
 
-.glitch::before,
-.glitch::after{
-  content:attr(data-text);
-  position:absolute;
-  left:0;
-  width:100%;
-  overflow:hidden;
-}
+  smartReconnect() {
+    if (this.retryCount < 5) {
+      setTimeout(() => {
+        this.retryCount++;
+        this.connectWebSocket();
+      }, 3000 * this.retryCount);
+    }
+  }
 
-.glitch::before{
-  animation:glitchTop 2s infinite;
-  color:red;
-}
+  updateLiveData(data) {
+    if (data.stats) {
+      this.animate(document.getElementById("friends"), data.stats.friends || 0);
+      this.animate(document.getElementById("followers"), data.stats.followers || 0);
+      this.animate(document.getElementById("following"), data.stats.following || 0);
+      
+      this.lastStats = {
+        friends: data.stats.friends || 0,
+        followers: data.stats.followers || 0,
+        following: data.stats.following || 0
+      };
+    }
+    
+    if (data.items) {
+      this.renderItems(data.items || []);
+      this.lastItems = data.items || [];
+    }
+    
+    document.getElementById('liveIndicator').textContent = '🟢';
+  }
 
-.glitch::after{
-  animation:glitchBottom 2s infinite;
-  color:blue;
-}
+  async fetchWithRetry(url, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, { 
+          signal: AbortSignal.timeout(10000),
+          cache: 'no-store'
+        });
+        if (res.ok) return res;
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
+  }
 
-@keyframes glitchTop{
-  0%{clip-path:inset(0 0 80% 0);}
-  50%{clip-path:inset(0 0 20% 0);}
-  100%{clip-path:inset(0 0 80% 0);}
-}
+  async loadStats() {
+    try {
+      const res = await this.fetchWithRetry('/api');
+      const data = await res.json();
+      this.animate(document.getElementById("friends"), data.friends || 0);
+      this.animate(document.getElementById("followers"), data.followers || 0);
+      this.animate(document.getElementById("following"), data.following || 0);
+      this.lastStats = data;
+    } catch (err) {
+      console.error('Stats failed:', err);
+    }
+  }
 
-@keyframes glitchBottom{
-  0%{clip-path:inset(80% 0 0 0);}
-  50%{clip-path:inset(20% 0 0 0);}
-  100%{clip-path:inset(80% 0 0 0);}
-}
+  async loadItems() {
+    const container = document.getElementById("itemsContainer");
+    container.innerHTML = Array(12).fill().map(() => 
+      '<div class="loading-smooth"></div>'
+    ).join('');
 
-/* HEADER */
-.header{
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
+    try {
+      const res = await this.fetchWithRetry('/api/items');
+      const data = await res.json();
+      this.renderItems(data.items || []);
+      this.lastItems = data.items || [];
+    } catch (err) {
+      console.error('Items failed:', err);
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading items...</div>';
+    }
+  }
 
-.profile{
-  width:60px;
-  height:60px;
-  border-radius:50%;
-  box-shadow:0 0 15px cyan;
-}
+  renderItems(items) {
+    const container = document.getElementById("itemsContainer");
+    if (!items?.length) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px;min-width:300px">No items equipped</div>';
+      return;
+    }
 
-/* AVATAR SIMPLE */
-.avatar-box{
-  text-align:center;
-  margin-top:12px;
-}
+    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
+  }
 
-#avatarImg{
-  width:180px;
-  height:180px;
-  border-radius:12px;
-  box-shadow:0 0 30px cyan;
-  object-fit:cover;
-}
+  getRarity(item) {
+    // FIXED: Use item data instead of price
+    if (item.limited || item.name?.toLowerCase().includes('limited')) return "legendary";
+    if (item.name?.toLowerCase().includes('epic') || item.name?.toLowerCase().includes('legendary')) return "epic";
+    if (item.name?.toLowerCase().includes('rare') || item.name?.toLowerCase().includes('uncommon')) return "rare";
+    return "";
+  }
 
-/* BUTTON USERNAME */
-.copy-btn {
-  margin-top: 10px;
-  padding: 12px 18px;
-  background: rgba(0, 255, 255, 0.1);
-  border: 1px solid #0ff;
-  color: #0ff;
-  cursor: pointer;
-  border-radius: 10px;
-  font-family: 'Orbitron', sans-serif;
-  transition: all 0.3s ease;
-  display: inline-block;
-  width:100%;
-  box-sizing:border-box;
-}
+  createItemCard(item, index) {
+    const rarity = this.getRarity(item);
+    const name = item.name?.replace(/[\$\$]/g, '') || 'Unknown Item';
+    
+    return `
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
+        <img src="${item.image}" 
+             onerror="this.src='https://via.placeholder.com/85x55/333/ccc?text=Item';this.onerror=null"
+             loading="lazy">
+        <div class="item-name">${name}</div>
+      </div>
+    `;
+  }
 
-.copy-btn:hover {
-  background: #0ff;
-  color: #000;
-  box-shadow: 0 0 10px #0ff, 0 0 25px #0ff;
-}
+  animate(el, end) {
+    end = Number(end) || 0;
+    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    const duration = 1000;
+    let startTime = null;
 
-.copy-btn:active {
-  transform: scale(0.95);
-}
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const value = Math.floor(start + (end - start) * easeProgress);
+      el.textContent = value.toLocaleString();
+      
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
 
-.copy-btn.copied {
-  background: #00ff88;
-  border-color: #00ff88;
-  color: #000;
-  box-shadow: 0 0 10px #00ff88, 0 0 25px #00ff88;
-}
+  addInteractions() {
+    // Copy button
+    document.getElementById('copyBtn').onclick = () => {
+      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = '✅ Copied!';
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+        }, 2000);
+      }).catch(() => {
+        // Fallback
+        const textArea = document.createElement('textarea');
+        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      });
+    };
 
-/* STATS */
-.stats{
-  display:grid;
-  grid-template-columns:repeat(3,1fr);
-  gap:8px;
-  margin-top:12px;
-}
-
-.stat{
-  text-align:center;
-  background:rgba(0,255,255,0.1);
-  padding:8px;
-  border-radius:8px;
-  font-size:12px;
-  transition:.3s;
-}
-
-.stat:hover{
-  transform:scale(1.1);
-  box-shadow:0 0 15px cyan;
-}
-
-/* TAG */
-.tagline{
-  text-align:center;
-  margin-top:10px;
-  font-size:13px;
-  color:cyan;
-}
-
-/* ICON */
-.icons{
-  display:flex;
-  justify-content:center;
-  gap:18px;
-  margin-top:12px;
-}
-
-.icons a{
-  font-size:18px;
-  color:cyan;
-  transition:.3s;
-}
-
-.icons a:hover{
-  transform:scale(1.3);
-}
-
-/* BUTTON */
-.btn{
-  display:flex;
-  align-items:center;
-  justify-content:center;
-  gap:8px;
-  padding:11px;
-  border-radius:10px;
-  border:1px solid cyan;
-  color:cyan;
-  text-decoration:none;
-  font-size:13px;
-  transition:.3s;
-}
-
-.btn:hover{
-  background:cyan;
-  color:black;
-}
-
-/* ROW */
-.button-row{
-  display:flex;
-  gap:8px;
-  margin-top:14px;
-}
-
-.main-btn{
-  flex:1;
-}
-
-.qr-btn{
-  width:48px;
-  min-width:48px;
-}
-
-.discord-btn{
-  margin-top:10px;
-}
-
-/* RESPONSIVE */
-@media(max-width:480px){
-  .header{
-    flex-direction:column;
-    text-align:center;
+    // Manual refresh button (hidden)
+    document.addEventListener('keydown', (e) => {
+      if (e.ctrlKey && e.key === 'r') {
+        e.preventDefault();
+        this.loadStats();
+        this.loadItems();
+      }
+    });
   }
 }
 
-/* ===================== */
-/* ROBLOX ITEMS GRID */
-/* ===================== */
-
-.items-section{
-  margin-top:15px;
-}
-
-.items-title{
-  text-align:center;
-  color:cyan;
-  font-size:13px;
-  margin-bottom:8px;
-}
-
-.items-container{
-  display:flex;
-  gap:8px;
-  overflow-x:auto;
-  padding:8px 0;
-  scrollbar-width: thin;
-  scrollbar-color: cyan transparent;
-  scroll-snap-type: x mandatory;
-  min-height:100px;
-}
-
-.items-container::-webkit-scrollbar {
-  height: 4px;
-}
-
-.items-container::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-.items-container::-webkit-scrollbar-thumb {
-  background: cyan;
-  border-radius: 2px;
-}
-
-/* MINI ITEM CARD */
-.item-card{
-  min-width:85px;
-  flex:0 0 85px;
-  background:rgba(0,255,255,0.08);
-  border:1px solid rgba(0,255,255,0.2);
-  border-radius:10px;
-  padding:8px 6px;
-  text-align:center;
-  cursor:pointer;
-  transition:0.3s;
-  scroll-snap-align: center;
-  position:relative;
-  backdrop-filter:blur(10px);
-}
-
-.item-card:hover{
-  transform:scale(1.05) translateY(-5px);
-  box-shadow:0 10px 25px rgba(0,255,255,0.3);
-}
-
-/* GLOW RARITY */
-.item-card.legendary{
-  border-color:gold;
-  box-shadow:0 0 15px rgba(255,215,0,0.5);
-}
-
-.item-card.legendary::before{
-  content:"⭐";
-  position:absolute;
-  top:4px;
-  right:4px;
-  font-size:10px;
-  color:gold;
-  text-shadow:0 0 5px gold;
-}
-
-.item-card.epic{
-  border-color:#8a2be2;
-  box-shadow:0 0 15px rgba(138,43,226,0.5);
-}
-
-.item-card.epic::before{
-  content:"💜";
-  position:absolute;
-  top:4px;
-  right:4px;
-  font-size:10px;
-  color:#8a2be2;
-  text-shadow:0 0 5px #8a2be2;
-}
-
-.item-card.rare{
-  border-color:cyan;
-  box-shadow:0 0 15px rgba(0,255,255,0.4);
-}
-
-.item-card.rare::before{
-  content:"🔷";
-  position:absolute;
-  top:4px;
-  right:4px;
-  font-size:10px;
-  color:cyan;
-  text-shadow:0 0 5px cyan;
-}
-
-/* IMAGE */
-.item-card img{
-  width:100%;
-  height:55px;
-  object-fit:cover;
-  border-radius:6px;
-  margin-bottom:4px;
-}
-
-/* NAME */
-.item-name{
-  font-size:9px;
-  font-weight:500;
-  line-height:1.1;
-  margin-bottom:2px;
-  color:#ccc;
-  white-space:nowrap;
-  overflow:hidden;
-  text-overflow:ellipsis;
-}
-
-/* EQUIPPED */
-.equipped{
-  position:absolute;
-  top:4px;
-  left:4px;
-  font-size:8px;
-  background:lime;
-  color:black;
-  padding:1px 3px;
-  border-radius:3px;
-  font-weight:bold;
-}
-
-/* LOADING */
-.loading-smooth{
-  min-width:85px;
-  flex:0 0 85px;
-  height:90px;
-  border-radius:10px;
-  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
-  animation:loading-smooth 1.5s ease-in-out infinite;
-  position:relative;
-  overflow:hidden;
-}
-
-.loading-smooth::after{
-  content:"...";
-  position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  font-size:12px;
-  color:#666;
-}
-
-@keyframes loading-smooth{
-  0%,100%{opacity:0.6; transform:scale(1);}
-  50%{opacity:1; transform:scale(1.02);}
-}
-
-#liveIndicator {
-  animation: pulse 2s infinite;
-  font-size:12px;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-}
+// Global app instance
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+  app = new PortfolioApp();
+});
