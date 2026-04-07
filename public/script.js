@@ -1,245 +1,279 @@
 class PortfolioApp {
   constructor() {
-    this.lastItems = [];
-    this.lastStats = { friends: -1, followers: -1, following: -1 };
+    this.ws = null;
+    this.scene = null;
+    this.camera = null;
+    this.renderer = null;
+    this.avatarTexture = null;
+    this.mesh = null;
+    this.lastData = {};
+    this.retryCount = 0;
     this.init();
   }
 
-  async init() {
-    await Promise.all([
-      this.loadReal3DAvatar(),
-      this.loadEquippedItems(),
-      this.loadStats()
-    ]);
-    this.addInteractions();
+  init() {
+    this.initThreeJS();
+    this.loadAvatar3D();
     this.connectWebSocket();
+    this.loadStats();
+    this.loadItems();
+    this.addInteractions();
   }
 
-  // 🔥 REAL 3D AVATAR - 360° Canvas Rotation
-  async loadReal3DAvatar() {
-    const canvas = document.createElement('canvas');
-    canvas.id = 'avatar3D';
-    canvas.width = 200;
-    canvas.height = 200;
-    canvas.className = 'avatar-canvas';
-    document.querySelector('.avatar-box').appendChild(canvas);
-
-    const ctx = canvas.getContext('2d');
-    let rotation = 0;
-    let images = [];
-
-    // Load 8 angles untuk 3D effect
-    for (let i = 0; i < 8; i++) {
-      try {
-        const res = await fetch(`/api/avatar`);
-        const data = await res.json();
-        const img = new Image();
-        img.crossOrigin = 'anonymous';
-        img.src = data.image;
-        images[i] = img;
-      } catch {
-        images[i] = new Image();
-        images[i].src = `https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=8941948601&size=420x420&format=Png`;
-      }
-    }
-
-    function animate() {
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // Smooth 3D rotation
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate((rotation * 0.02) + Math.sin(rotation * 0.01) * 0.1);
-      
-      // Dynamic lighting
-      const gradient = ctx.createRadialGradient(0, -25, 0, 0, 0, 100);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
-      gradient.addColorStop(0.6, 'rgba(0,255,255,0.1)');
-      gradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-90, -90, 180, 180);
-      
-      // Shadow & glow
-      ctx.shadowColor = 'rgba(0,255,255,0.6)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetY = 8;
-      
-      // Draw current frame
-      const frame = Math.floor(rotation / 45) % 8;
-      if (images[frame]?.complete && images[frame].naturalWidth > 0) {
-        ctx.drawImage(images[frame], -90, -90, 180, 180);
-      }
-      
-      ctx.restore();
-      rotation += 1.2;
-      requestAnimationFrame(animate);
-    }
-    animate();
+  // 🔥 THREE.JS 3D AVATAR
+  initThreeJS() {
+    const container = document.getElementById('avatarContainer');
+    
+    // Scene setup
+    this.scene = new THREE.Scene();
+    this.scene.background = new THREE.Color(0x000000);
+    
+    // Camera
+    this.camera = new THREE.PerspectiveCamera(45, 1, 0.1, 1000);
+    this.camera.position.set(0, 0, 2);
+    
+    // Renderer
+    this.renderer = new THREE.WebGLRenderer({ 
+      antialias: true, 
+      alpha: true 
+    });
+    this.renderer.setSize(180, 180);
+    this.renderer.setPixelRatio(window.devicePixelRatio);
+    container.appendChild(this.renderer.domElement);
+    
+    // Sphere geometry for avatar
+    const geometry = new THREE.SphereGeometry(0.8, 64, 64);
+    
+    // Material with custom shader for lighting
+    const material = new THREE.MeshPhongMaterial({
+      color: 0xffffff,
+      shininess: 100,
+      specular: 0x111111
+    });
+    
+    this.mesh = new THREE.Mesh(geometry, material);
+    this.scene.add(this.mesh);
+    
+    // Lighting
+    const ambientLight = new THREE.AmbientLight(0x404040, 0.4);
+    this.scene.add(ambientLight);
+    
+    const pointLight = new THREE.PointLight(0x00ffff, 1, 10);
+    pointLight.position.set(2, 2, 2);
+    this.scene.add(pointLight);
+    
+    // Auto rotation
+    this.animate();
   }
 
-  // 🔥 LOAD ALL EQUIPPED ITEMS WITH RARITY
-  async loadEquippedItems() {
+  animate() {
+    requestAnimationFrame(() => this.animate());
+    
+    if (this.mesh && this.avatarTexture) {
+      this.mesh.rotation.y += 0.01;
+      this.mesh.rotation.x = Math.sin(Date.now() * 0.001) * 0.1;
+    }
+    
+    if (this.renderer) {
+      this.renderer.render(this.scene, this.camera);
+    }
+  }
+
+  async loadAvatar3D() {
     try {
-      const res = await fetch('/api/equipped');
+      const res = await this.fetchWithRetry('/api/avatar');
       const data = await res.json();
       
-      if (JSON.stringify(data.items) !== JSON.stringify(this.lastItems)) {
-        this.renderItems(data.items || []);
-        this.lastItems = data.items;
-        document.getElementById('liveIndicator').textContent = '🟢';
+      if (data.image) {
+        this.avatarTexture = new THREE.TextureLoader().load(data.image, 
+          (texture) => {
+            if (this.mesh) {
+              this.mesh.material.map = texture;
+              this.mesh.material.needsUpdate = true;
+            }
+          },
+          undefined,
+          () => {
+            console.error('Avatar texture failed to load');
+          }
+        );
       }
     } catch (err) {
-      console.error('Items load error:', err);
+      console.error('Avatar load failed:', err);
     }
   }
 
-  renderItems(items) {
-    const container = document.getElementById('itemsContainer');
-    if (!items.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#888;font-size:12px">No items equipped</div>';
-      return;
-    }
+  // 🔥 WEBSOCKET - UPDATE ONLY ON CHANGE
+  connectWebSocket() {
+    const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
+    this.ws = new WebSocket(wsUrl);
+    
+    this.ws.onopen = () => {
+      console.log('✅ LIVE: WebSocket connected');
+      document.getElementById('liveIndicator').textContent = '🟢';
+      this.retryCount = 0;
+    };
 
-    container.innerHTML = items.map((item, index) => {
-      const rarity = this.getRarity(item.name);
-      return `
-        <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
-          ${index < 4 ? '<div class="equipped">ON</div>' : ''}
-          ${item.limited ? '<div class="limited">★ LIMITED</div>' : ''}
-          <img src="${item.image}" 
-               onerror="this.src='https://via.placeholder.com/90x70/222/fff?text=ROBLOX';this.onerror=null;"
-               loading="lazy">
-          <div class="item-name">${item.name.length > 15 ? item.name.substring(0, 15) + '...' : item.name}</div>
-        </div>
-      `;
-    }).join('');
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data);
+        this.updateLiveData(data);
+      } catch (err) {
+        console.error('WS parse error:', err);
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log('❌ LIVE: WebSocket disconnected');
+      document.getElementById('liveIndicator').textContent = '🔴';
+      this.smartReconnect();
+    };
   }
 
-  getRarity(name) {
-    const lower = name.toLowerCase();
-    if (lower.includes('legendary') || lower.includes('dragon') || lower.includes('golden')) return 'legendary';
-    if (lower.includes('epic') || lower.includes('shadow') || lower.includes('neon')) return 'epic';
-    if (lower.includes('rare') || lower.includes('star') || lower.includes('crystal')) return 'rare';
-    return '';
+  smartReconnect() {
+    if (this.retryCount < 5) {
+      setTimeout(() => {
+        this.retryCount++;
+        this.connectWebSocket();
+      }, 2000 * this.retryCount);
+    }
+  }
+
+  // 🔥 SMART UPDATE - ONLY IF CHANGED
+  updateLiveData(data) {
+    // Update stats only if changed
+    if (data.stats && (
+      data.stats.friends !== this.lastData.friends ||
+      data.stats.followers !== this.lastData.followers ||
+      data.stats.following !== this.lastData.following
+    )) {
+      this.animate(document.getElementById("friends"), data.stats.friends);
+      this.animate(document.getElementById("followers"), data.stats.followers);
+      this.animate(document.getElementById("following"), data.stats.following);
+      this.lastData.friends = data.stats.friends;
+      this.lastData.followers = data.stats.followers;
+      this.lastData.following = data.stats.following;
+    }
+    
+    // Update items only if changed
+    if (data.items && JSON.stringify(data.items) !== JSON.stringify(this.lastData.items)) {
+      this.renderItems(data.items);
+      this.lastData.items = data.items;
+    }
+    
+    document.getElementById('liveIndicator').textContent = '🟢';
+  }
+
+  async fetchWithRetry(url, retries = 3) {
+    for (let i = 0; i < retries; i++) {
+      try {
+        const res = await fetch(url, { 
+          signal: AbortSignal.timeout(10000),
+          cache: 'no-store'
+        });
+        if (res.ok) return res;
+      } catch (err) {
+        if (i === retries - 1) throw err;
+        await new Promise(r => setTimeout(r, 1000 * (i + 1)));
+      }
+    }
   }
 
   async loadStats() {
     try {
-      const res = await fetch('/api/stats');
+      const res = await this.fetchWithRetry('/api');
       const data = await res.json();
-      
-      // Smooth counter animation
-      this.animateCounter('friends', data.friends || 0);
-      this.animateCounter('followers', data.followers || 0);
-      this.animateCounter('following', data.following || 0);
-      
-      this.lastStats = data;
+      this.animate(document.getElementById("friends"), data.friends || 0);
+      this.animate(document.getElementById("followers"), data.followers || 0);
+      this.animate(document.getElementById("following"), data.following || 0);
+      this.lastData.friends = data.friends || 0;
+      this.lastData.followers = data.followers || 0;
+      this.lastData.following = data.following || 0;
     } catch (err) {
-      console.error('Stats error:', err);
+      console.error('Stats failed:', err);
     }
   }
 
-  animateCounter(id, target) {
-    const el = document.getElementById(id);
-    const current = parseInt(el.textContent.replace(/,/g, '')) || 0;
-    if (Math.abs(target - current) < 10) {
-      el.textContent = target.toLocaleString();
+  async loadItems() {
+    const container = document.getElementById("itemsContainer");
+    container.innerHTML = Array(8).fill().map(() => 
+      '<div class="loading-smooth"></div>'
+    ).join('');
+
+    try {
+      const res = await this.fetchWithRetry('/api/items');
+      const data = await res.json();
+      this.renderItems(data.items || []);
+      this.lastData.items = data.items || [];
+    } catch (err) {
+      console.error('Items failed:', err);
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading...</div>';
+    }
+  }
+
+  renderItems(items) {
+    const container = document.getElementById("itemsContainer");
+    if (!items?.length) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px;width:100%;flex-shrink:0">No items equipped</div>';
       return;
     }
 
-    let startTime = null;
-    const duration = 1200;
-
-    const animate = (timestamp) => {
-      if (!startTime) startTime = timestamp;
-      const progress = Math.min((timestamp - startTime) / duration, 1);
-      const eased = 1 - Math.pow(1 - progress, 3);
-      const value = Math.floor(current + (target - current) * eased);
-      
-      el.textContent = value.toLocaleString();
-      
-      if (progress < 1) {
-        requestAnimationFrame(animate);
-      }
-    };
-    requestAnimationFrame(animate);
+    container.innerHTML = items.map((item, i) => this.createItemCard(item, i)).join('');
   }
 
-  // 🔥 OPTIMIZED WEBSOCKET
-  connectWebSocket() {
-    try {
-      const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const ws = new WebSocket(`${protocol}//${location.host}/websocket`);
+  getRarity(item) {
+    if (item.limited) return "legendary";
+    return "";
+  }
+
+  createItemCard(item, index) {
+    const rarity = this.getRarity(item);
+    return `
+      <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}', '_blank')">
+        ${index === 0 ? '<div class="equipped">ON</div>' : ''}
+        ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70/333/fff?text=?';this.onerror=null" loading="lazy">
+        <div class="item-name" title="${item.name}">${item.name}</div>
+      </div>
+    `;
+  }
+
+  animate(el, end) {
+    end = Number(end) || 0;
+    let start = parseInt(el.textContent.replace(/,/g, '')) || 0;
+    const duration = 1000;
+    let startTime = null;
+
+    const step = (timestamp) => {
+      if (!startTime) startTime = timestamp;
+      const progress = Math.min((timestamp - startTime) / duration, 1);
+      const easeProgress = 1 - Math.pow(1 - progress, 3);
+      const value = Math.floor(start + (end - start) * easeProgress);
+      el.textContent = value.toLocaleString();
       
-      ws.onopen = () => {
-        console.log('✅ WebSocket connected');
-        document.getElementById('liveIndicator').textContent = '🟢';
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.equipped && JSON.stringify(data.equipped.items) !== JSON.stringify(this.lastItems)) {
-            this.renderItems(data.equipped.items);
-            this.lastItems = data.equipped.items;
-          }
-          if (data.stats) {
-            Object.entries(data.stats).forEach(([key, value]) => {
-              if (this.lastStats[key] !== value) {
-                this.animateCounter(key, value);
-                this.lastStats[key] = value;
-              }
-            });
-          }
-        } catch (e) {
-          console.error('WS parse error:', e);
-        }
-      };
-
-      ws.onclose = () => {
-        document.getElementById('liveIndicator').textContent = '🔴';
-        // Auto reconnect
-        setTimeout(() => this.connectWebSocket(), 5000);
-      };
-    } catch (e) {
-      console.error('WebSocket init failed:', e);
-    }
+      if (progress < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
   }
 
   addInteractions() {
-    // Copy button with feedback
-    const copyBtn = document.getElementById('copyBtn');
-    copyBtn.onclick = async () => {
-      try {
-        await navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4');
-        copyBtn.classList.add('copied');
-        copyBtn.innerHTML = '✅ Copied!';
+    // Copy button
+    document.getElementById('copyBtn').onclick = () => {
+      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
+        const btn = document.getElementById('copyBtn');
+        btn.classList.add('copied');
+        btn.innerHTML = '✅ Copied!';
         setTimeout(() => {
-          copyBtn.classList.remove('copied');
-          copyBtn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+          btn.classList.remove('copied');
+          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
         }, 2000);
-      } catch {
-        // Fallback
-        const textArea = document.createElement('textarea');
-        textArea.value = 'NSSxFiiCruzh | @dapaarowr4';
-        document.body.appendChild(textArea);
-        textArea.select();
-        document.execCommand('copy');
-        document.body.removeChild(textArea);
-      }
+      });
     };
-
-    // Auto refresh
-    setInterval(() => {
-      this.loadEquippedItems();
-      this.loadStats();
-    }, 25000); // 25s
   }
 }
 
-// Initialize when DOM ready
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', () => new PortfolioApp());
-} else {
-  new PortfolioApp();
-}
+// Global app instance
+let app;
+document.addEventListener('DOMContentLoaded', () => {
+  app = new PortfolioApp();
+});
