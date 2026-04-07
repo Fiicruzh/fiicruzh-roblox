@@ -147,7 +147,7 @@ app.get("/api/items", async (req, res) => {
           name: `Item #${id}`,
           price: 0,
           limited: false,
-          image: `https://via.placeholder.com/90x70/333/fff?text=ID${id.slice(-4)}`,
+          image: `https://via.placeholder.com/90x70/333/fff?text=ID${String(id).slice(-4)}`,
           link: `https://www.roblox.com/catalog/${id}`
         };
       }
