@@ -6,36 +6,47 @@ class PortfolioApp {
     this.isDragging = false;
     this.lastX = 0;
     this.lastY = 0;
-    this.rotationX = 0;
+    
+    // 2D ROBLOX SMOOTH ROTATION
     this.rotationY = 0;
-    this.targetRotationX = 0;
     this.targetRotationY = 0;
+    this.rotationSpeed = 0.08;
+    this.autoRotateSpeed = 0.3;
+    
+    // ✅ SMART ITEMS TRACKING - NO CONSTANT REFRESH
+    this.currentItemsHash = '';
+    this.lastItemsUpdate = 0;
+    this.itemsCheckInterval = null;
+    
     this.retryCount = 0;
     this.init();
   }
 
   init() {
     this.setupCanvas();
-    this.loadAvatar3D();
+    this.loadAvatar2D();
     this.connectWebSocket();
     this.loadStats();
-    this.loadItems();
+    this.loadItemsSmart();
     this.addInteractions();
   }
 
   setupCanvas() {
-    const canvas = document.getElementById('avatar3D');
+    const canvas = document.getElementById('avatar2D');
     this.avatarCtx = canvas.getContext('2d');
     
-    // Drag events
+    // Drag events - ULTRA SMOOTH 360°
     canvas.addEventListener('mousedown', (e) => this.startDrag(e));
     canvas.addEventListener('mousemove', (e) => this.drag(e));
     canvas.addEventListener('mouseup', () => this.stopDrag());
     canvas.addEventListener('mouseleave', () => this.stopDrag());
     
-    // Touch support
+    // Touch support - Mobile smooth scroll
     canvas.addEventListener('touchstart', (e) => this.startDrag(e.touches[0]));
-    canvas.addEventListener('touchmove', (e) => this.drag(e.touches[0]));
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      this.drag(e.touches[0]);
+    });
     canvas.addEventListener('touchend', () => this.stopDrag());
   }
 
@@ -44,83 +55,80 @@ class PortfolioApp {
     this.lastX = e.clientX;
     this.lastY = e.clientY;
     document.body.style.cursor = 'grabbing';
+    this.autoRotateSpeed = 0;
   }
 
   drag(e) {
     if (!this.isDragging) return;
     
     const deltaX = e.clientX - this.lastX;
-    const deltaY = e.clientY - this.lastY;
-    
-    this.targetRotationY += deltaX * 0.5;
-    this.targetRotationX -= deltaY * 0.5;
+    this.targetRotationY += deltaX * 0.8;
     
     this.lastX = e.clientX;
-    this.lastY = e.clientY;
   }
 
   stopDrag() {
     this.isDragging = false;
     document.body.style.cursor = 'grab';
+    this.autoRotateSpeed = 0.3;
   }
 
-  // 🔥 3D AVATAR 360° RENDER
-  async loadAvatar3D() {
+  // 🔥 2D ROBLOX AVATAR - ULTRA SMOOTH 360°
+  async loadAvatar2D() {
     try {
-      const res = await this.fetchWithRetry('/api/avatar');
+      const res = await this.fetchWithRetry('/api/avatar2d');
       const data = await res.json();
       this.avatarImg = new Image();
       this.avatarImg.crossOrigin = 'anonymous';
-      this.avatarImg.onload = () => this.animate3D();
+      this.avatarImg.onload = () => this.animate2D();
       this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
     } catch (err) {
       console.error('Avatar load failed:', err);
       this.avatarImg = new Image();
       this.avatarImg.src = 'https://via.placeholder.com/200?text=ROBLOX';
-      this.animate3D();
+      this.animate2D();
     }
   }
 
-  animate3D() {
-    const canvas = document.getElementById('avatar3D');
+  animate2D() {
+    const canvas = document.getElementById('avatar2D');
     
     function render() {
       const ctx = canvas.getContext('2d');
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       
-      // Smooth rotation
-      app.rotationX += (app.targetRotationX - app.rotationX) * 0.1;
-      app.rotationY += (app.targetRotationY - app.rotationY) * 0.1;
+      // ULTRA SMOOTH ROTATION
+      app.rotationY += (app.targetRotationY - app.rotationY) * app.rotationSpeed;
       
       // Auto rotate when not dragging
-      if (!app.isDragging) {
-        app.targetRotationY += 0.3;
+      if (!app.isDragging && Math.abs(app.targetRotationY - app.rotationY) < 1) {
+        app.targetRotationY += app.autoRotateSpeed;
       }
       
       ctx.save();
       ctx.translate(canvas.width / 2, canvas.height / 2);
       
-      // 3D transformations
-      ctx.rotate(app.rotationY * 0.01);
-      ctx.scale(1.1, 0.95);
+      // 360° ROTATION EFFECT
+      ctx.rotate(app.rotationY * 0.017); // Convert to radians
       
-      // Lighting effect
-      const gradient = ctx.createRadialGradient(0, -30, 0, 0, 0, 100);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.4)');
-      gradient.addColorStop(0.5, 'rgba(0,255,255,0.1)');
+      // ROBLOX 2D AVATAR ENHANCEMENTS
+      // Dynamic lighting
+      const gradient = ctx.createRadialGradient(0, -40, 0, 0, 0, 120);
+      gradient.addColorStop(0, 'rgba(0,255,255,0.5)');
+      gradient.addColorStop(0.4, 'rgba(0,255,255,0.2)');
       gradient.addColorStop(1, 'transparent');
       ctx.fillStyle = gradient;
-      ctx.fillRect(-90, -90, 180, 180);
+      ctx.fillRect(-95, -95, 190, 190);
       
-      // Shadow
-      ctx.shadowColor = 'rgba(0,0,0,0.5)';
-      ctx.shadowBlur = 20;
-      ctx.shadowOffsetX = 10;
-      ctx.shadowOffsetY = 10;
+      // Shadow effect
+      ctx.shadowColor = 'rgba(0,0,0,0.6)';
+      ctx.shadowBlur = 25;
+      ctx.shadowOffsetX = 8;
+      ctx.shadowOffsetY = 8;
       
-      // Draw avatar
-      if (app.avatarImg.complete) {
-        ctx.drawImage(app.avatarImg, -85, -85, 170, 170);
+      // Draw avatar image
+      if (app.avatarImg.complete && app.avatarImg.naturalWidth > 0) {
+        ctx.drawImage(app.avatarImg, -90, -90, 180, 180);
       }
       
       ctx.restore();
@@ -129,7 +137,7 @@ class PortfolioApp {
     render();
   }
 
-  // 🔥 WEBSOCKET REAL-TIME UPDATE
+  // 🔥 WEBSOCKET - CHANGE DETECTION
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     this.ws = new WebSocket(wsUrl);
@@ -172,10 +180,13 @@ class PortfolioApp {
       this.animate(document.getElementById("following"), data.following);
     }
     
-    if (data.items) {
+    // ✅ SMART ITEMS - Only update if changed
+    if (data.items && data.itemsHash !== this.currentItemsHash) {
+      this.currentItemsHash = data.itemsHash;
       this.renderItems(data.items);
       document.getElementById("totalValue").textContent = 
         `${data.totalValue?.toLocaleString() || 0} R$`;
+      this.lastItemsUpdate = Date.now();
     }
     
     document.getElementById('liveIndicator').textContent = '🟢';
@@ -208,21 +219,53 @@ class PortfolioApp {
     }
   }
 
-  async loadItems() {
+  // ✅ SMART ITEMS - Only refresh when changed
+  async loadItemsSmart() {
     const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(8).fill().map(() => 
-      '<div class="loading-smooth"></div>'
-    ).join('');
+    
+    // Show loading only first time
+    if (!this.currentItemsHash) {
+      container.innerHTML = Array(8).fill().map(() => 
+        '<div class="loading-smooth"></div>'
+      ).join('');
+    }
 
     try {
       const res = await this.fetchWithRetry('/api/items');
       const data = await res.json();
-      this.renderItems(data.items || []);
-      document.getElementById("totalValue").textContent = 
-        `${(data.totalValue || 0).toLocaleString()} R$`;
+      
+      // Only update if items actually changed
+      if (data.itemsHash !== this.currentItemsHash) {
+        this.currentItemsHash = data.itemsHash;
+        this.renderItems(data.items || []);
+        document.getElementById("totalValue").textContent = 
+          `${(data.totalValue || 0).toLocaleString()} R$`;
+        this.lastItemsUpdate = Date.now();
+      }
     } catch (err) {
       console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Loading...</div>';
+      if (!this.currentItemsHash) {
+        container.innerHTML = '<div style="padding:20px;text-align:center;color:#666">Loading...</div>';
+      }
+    }
+    
+    // Smart check interval - only when needed
+    if (this.itemsCheckInterval) clearInterval(this.itemsCheckInterval);
+    this.itemsCheckInterval = setInterval(() => this.checkItemsUpdate(), 45000); // 45s smart check
+  }
+
+  async checkItemsUpdate() {
+    try {
+      const res = await this.fetchWithRetry('/api/items?checkOnly=true');
+      const data = await res.json();
+      
+      if (data.itemsHash !== this.currentItemsHash) {
+        console.log('🔄 ITEMS CHANGED - Updating...');
+        this.currentItemsHash = data.itemsHash;
+        await this.loadItemsSmart();
+      }
+    } catch (err) {
+      console.error('Items check failed:', err);
     }
   }
 
@@ -249,7 +292,7 @@ class PortfolioApp {
       <div class="item-card ${rarity}" onclick="window.open('${item.link || '#'}')">
         ${index === 0 ? '<div class="equipped">ON</div>' : ''}
         ${item.limited ? '<div class="limited">LIMITED</div>' : ''}
-        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null">
+        <img src="${item.image}" onerror="this.src='https://via.placeholder.com/90x70?text=?';this.onerror=null" loading="lazy">
         <div class="item-name">${item.name}</div>
         <div class="item-price">${(item.price || 0).toLocaleString()} R$</div>
       </div>
@@ -287,12 +330,6 @@ class PortfolioApp {
         }, 2000);
       });
     };
-
-    // Auto refresh every 30s
-    setInterval(() => {
-      this.loadItems();
-      this.loadStats();
-    }, 30000);
   }
 }
 
@@ -300,5 +337,5 @@ class PortfolioApp {
 let app;
 document.addEventListener('DOMContentLoaded', () => {
   app = new PortfolioApp();
-  document.getElementById('avatar3D').style.cursor = 'grab';
+  document.getElementById('avatar2D').style.cursor = 'grab';
 });
