@@ -107,11 +107,11 @@ body{
   box-shadow:0 0 15px cyan;
 }
 
-/* AVATAR 3D */
+/* AVATAR 3D - ROBLOX STYLE */
 .avatar-box{
   text-align:center;
   margin-top:12px;
-  perspective: 1000px;
+  perspective: 1200px;
 }
 
 #avatar3D{
@@ -120,6 +120,7 @@ body{
   border-radius:12px;
   box-shadow:0 0 30px cyan;
   cursor: grab;
+  transition: all 0.1s ease-out;
 }
 
 #avatar3D:active{
@@ -177,23 +178,6 @@ body{
 .stat:hover{
   transform:scale(1.1);
   box-shadow:0 0 15px cyan;
-}
-
-/* TOTAL VALUE */
-.total-value{
-  text-align:center;
-  margin:15px 0;
-  background:rgba(255,215,0,0.1);
-  border:1px solid gold;
-  border-radius:10px;
-  padding:10px;
-}
-
-.total-value h4{
-  margin:0;
-  font-size:13px;
-  color:gold;
-  text-shadow:0 0 5px gold;
 }
 
 /* TAG */
@@ -271,7 +255,7 @@ body{
 }
 
 /* ===================== */
-/* ROBLOX ITEMS ADVANCED */
+/* ROBLOX ITEMS */
 /* ===================== */
 
 .items-section{
@@ -413,14 +397,6 @@ body{
   50%{transform:scale(1.1);}
 }
 
-/* PRICE */
-.item-price{
-  font-size:9px;
-  color:cyan;
-  font-weight:bold;
-  margin-top:2px;
-}
-
 /* ULTRA SMOOTH LOADING */
 .loading-smooth{
   min-width:90px;
@@ -453,9 +429,7 @@ body{
   100%{left:100%;}
 }
 
-/* ... keep all previous CSS ... */
-
-/* 3D AVATAR ENHANCED */
+/* 3D AVATAR ENHANCED - ROBLOX INERTIA */
 .drag-hint {
   font-size: 10px;
   color: #0ff;
@@ -472,5 +446,3 @@ body{
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
-
-/* ... rest of CSS stays same ... */
