@@ -16,30 +16,49 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const USER_ID = 8941948601;
 
+// 🔥 CACHE BIAR GA 0 TERUS
+let cache = {
+  friends: 0,
+  followers: 0,
+  following: 0
+};
+
 // ==========================
-// 🔥 API STATS
+// 🔥 API STATS (FIXED)
 // ==========================
 app.get("/api", async (req,res)=>{
   try{
-    const [friends, followers, following] = await Promise.all([
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`).then(r=>r.json()),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`).then(r=>r.json()),
-      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`).then(r=>r.json())
+    const [friendsRes, followersRes, followingRes] = await Promise.all([
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      fetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
     ]);
 
-    res.json({
-      friends: friends.count || 0,
-      followers: followers.count || 0,
-      following: following.count || 0
-    });
+    const friends = await friendsRes.json();
+    const followers = await followersRes.json();
+    const following = await followingRes.json();
 
-  }catch{
-    res.json({friends:0,followers:0,following:0});
+    const data = {
+      friends: friends?.count ?? cache.friends,
+      followers: followers?.count ?? cache.followers,
+      following: following?.count ?? cache.following
+    };
+
+    // 🔥 UPDATE CACHE
+    cache = data;
+
+    res.json(data);
+
+  }catch(err){
+    console.log("API ERROR:", err);
+
+    // 🔥 FALLBACK KE DATA TERAKHIR
+    res.json(cache);
   }
 });
 
 // ==========================
-// 🔥 AVATAR AUTO
+// 🔥 AVATAR
 // ==========================
 app.get("/api/avatar", async (req,res)=>{
   try{
@@ -48,7 +67,7 @@ app.get("/api/avatar", async (req,res)=>{
     ).then(r=>r.json());
 
     res.json({
-      image: avatar.data?.[0]?.imageUrl
+      image: avatar.data?.[0]?.imageUrl || null
     });
 
   }catch{
@@ -57,7 +76,7 @@ app.get("/api/avatar", async (req,res)=>{
 });
 
 // ==========================
-// 🔥 ITEMS (FIX + PRICE + LIMITED)
+// 🔥 ITEMS
 // ==========================
 app.get("/api/items", async (req,res)=>{
   try{
