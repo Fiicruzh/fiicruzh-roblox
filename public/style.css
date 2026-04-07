@@ -437,3 +437,28 @@ body{
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
 }
+
+/* 🔥 REAL 3D AVATAR */
+.avatar-img {
+  width: 180px;
+  height: 180px;
+  border-radius: 12px;
+  box-shadow: 0 0 30px cyan;
+  animation: avatarFloat 4s ease-in-out infinite;
+  transform-style: preserve-3d;
+}
+
+@keyframes avatarFloat {
+  0%, 100% { 
+    transform: translateY(0px) rotateY(0deg) rotateX(5deg); 
+  }
+  25% { 
+    transform: translateY(-3px) rotateY(90deg) rotateX(5deg); 
+  }
+  50% { 
+    transform: translateY(-8px) rotateY(180deg) rotateX(5deg); 
+  }
+  75% { 
+    transform: translateY(-3px) rotateY(270deg) rotateX(5deg); 
+  }
+}
