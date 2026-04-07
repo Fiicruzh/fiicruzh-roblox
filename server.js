@@ -34,7 +34,7 @@ let cachedData = {
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 30000;
+const CACHE_DURATION = 15000; // 🔥 15 detik untuk auto-update cepat
 
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
@@ -54,6 +54,108 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   }
 }
 
+// 🔥 AUTO UPDATE FUNCTION - Deteksi perubahan Roblox REAL-TIME
+async function refreshAllData() {
+  console.log('🔄 [AUTO] Checking Roblox updates...');
+  
+  try {
+    // 1. Refresh Stats
+    const [friendsRes, followersRes, followingRes] = await Promise.allSettled([
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+    ]);
+
+    const newStats = {
+      friends: 0,
+      followers: 0,
+      following: 0
+    };
+
+    if (friendsRes.status === 'fulfilled') {
+      try { newStats.friends = (await friendsRes.value.json()).count || 0; } catch {}
+    }
+    if (followersRes.status === 'fulfilled') {
+      try { newStats.followers = (await followersRes.value.json()).count || 0; } catch {}
+    }
+    if (followingRes.status === 'fulfilled') {
+      try { newStats.following = (await followingRes.value.json()).count || 0; } catch {}
+    }
+
+    // 2. Refresh ALL Items (TIDAK DI BATASI 12 lagi!)
+    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    const wear = await wearRes.json();
+    let ids = wear.assetIds || [];
+    console.log(`👕 [AUTO] Found ${ids.length} equipped items`);
+
+    let newItems = [];
+    if (ids.length > 0) {
+      // 🔥 Batch thumbnails untuk SEMUA items
+      let thumbs = [];
+      try {
+        const thumbsRes = await fetchWithRetry(
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
+        );
+        thumbs = await thumbsRes.json();
+      } catch (e) {
+        console.log('Thumbs batch failed');
+      }
+
+      // 🔥 Process SEMUA items (tanpa slice(0,12))
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        try {
+          const detailRes = await fetchWithRetry(
+            `https://economy.roblox.com/v2/assets/${id}/details`,
+            2, 500
+          );
+          const detail = await detailRes.json();
+
+          const thumb = thumbs.data?.find(t => t.targetId == id);
+
+          newItems.push({
+            name: detail.Name || `Item #${String(id).slice(-4)}`,
+            image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
+            link: `https://www.roblox.com/catalog/${id}/item`,
+            limited: detail.IsLimited || detail.IsLimitedUnique || false
+          });
+
+        } catch (itemErr) {
+          // FIXED: Safe string conversion
+          const idStr = String(id);
+          newItems.push({
+            name: `Item #${idStr.slice(-4)}`,
+            image: `https://via.placeholder.com/150x150/333/aaa?text=#${idStr.slice(-4)}`,
+            link: `https://www.roblox.com/catalog/${id}`,
+            limited: false
+          });
+        }
+      }
+    }
+
+    // 🔥 DETEKSI PERUBAHAN - Hanya update jika berbeda
+    const statsChanged = JSON.stringify(newStats) !== JSON.stringify(cachedData.stats);
+    const itemsChanged = JSON.stringify(newItems) !== JSON.stringify(cachedData.items);
+
+    if (statsChanged || itemsChanged) {
+      cachedData.stats = newStats;
+      cachedData.items = newItems;
+      cachedData.lastUpdate = Date.now();
+      
+      console.log(`✅ [AUTO] UPDATED! Stats:${statsChanged?'✓':'-'} Items:${itemsChanged?'✓':'-'} (${newItems.length} items)`);
+      
+      // 🔥 BROADCAST perubahan ke semua client
+      if (statsChanged) broadcast({ stats: newStats });
+      if (itemsChanged) broadcast({ items: newItems });
+    } else {
+      console.log('ℹ️ [AUTO] No changes - items same');
+    }
+
+  } catch (err) {
+    console.error('❌ [AUTO] Refresh failed:', err.message);
+  }
+}
+
 app.get("/api", async (req, res) => {
   try {
     const now = Date.now();
@@ -63,46 +165,8 @@ app.get("/api", async (req, res) => {
     }
 
     console.log('🔄 Fetching stats...');
-    
-    const [friendsRes, followersRes, followingRes] = await Promise.allSettled([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
-    ]);
-
-    const stats = {
-      friends: 0,
-      followers: 0,
-      following: 0
-    };
-
-    if (friendsRes.status === 'fulfilled') {
-      try {
-        const data = await friendsRes.value.json();
-        stats.friends = data.count || 0;
-      } catch {}
-    }
-
-    if (followersRes.status === 'fulfilled') {
-      try {
-        const data = await followersRes.value.json();
-        stats.followers = data.count || 0;
-      } catch {}
-    }
-
-    if (followingRes.status === 'fulfilled') {
-      try {
-        const data = await followingRes.value.json();
-        stats.following = data.count || 0;
-      } catch {}
-    }
-
-    cachedData.stats = stats;
-    cachedData.lastUpdate = now;
-
-    console.log(`✅ Stats: F${stats.friends} FL${stats.followers} FG${stats.following}`);
-    broadcast({ stats });
-    res.json(stats);
+    await refreshAllData();
+    res.json(cachedData.stats);
 
   } catch (err) {
     console.error("Stats error:", err.message);
@@ -132,79 +196,15 @@ app.get("/api/avatar", async (req, res) => {
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
-    console.log('🔄 Fetching items...');
     
     if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
       console.log(`📦 Cache hit: ${cachedData.items.length} items`);
       return res.json({ items: cachedData.items });
     }
 
-    const wearRes = await fetchWithRetry(
-      `https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`
-    );
-    
-    const wear = await wearRes.json();
-    let ids = wear.assetIds || [];
-    console.log(`👕 Equipped: ${ids.length} items`);
-    
-    if (ids.length === 0) {
-      cachedData.items = [];
-      cachedData.lastUpdate = now;
-      console.log('📦 No items');
-      return res.json({ items: [] });
-    }
-
-    ids = ids.slice(0, 12); // Max 12 mini cards
-
-    // Batch thumbnails
-    let thumbs = [];
-    try {
-      const thumbsRes = await fetchWithRetry(
-        `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
-      );
-      thumbs = await thumbsRes.json();
-    } catch (e) {
-      console.log('Thumbs failed');
-    }
-
-    const result = [];
-    
-    for (let i = 0; i < ids.length; i++) {
-      const id = ids[i];
-      try {
-        const detailRes = await fetchWithRetry(
-          `https://economy.roblox.com/v2/assets/${id}/details`,
-          2, 500
-        );
-        const detail = await detailRes.json();
-
-        const thumb = thumbs.data?.find(t => t.targetId == id);
-
-        result.push({
-          name: detail.Name || `Item #${id}`,
-          image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-          link: `https://www.roblox.com/catalog/${id}/item`,
-          limited: detail.IsLimited || detail.IsLimitedUnique || false
-        });
-
-      } catch (itemErr) {
-        // 🔥 FIXED: Ensure id is always a string before calling slice()
-        const idStr = String(id);
-        result.push({
-          name: `Item #${idStr.slice(-4)}`,
-          image: `https://via.placeholder.com/150x150/333/aaa?text=#${idStr.slice(-4)}`,
-          link: `https://www.roblox.com/catalog/${id}`,
-          limited: false
-        });
-      }
-    }
-
-    cachedData.items = result;
-    cachedData.lastUpdate = now;
-
-    console.log(`✅ Loaded ${result.length} items`);
-    broadcast({ items: result });
-    res.json({ items: result });
+    console.log('🔄 Fetching items...');
+    await refreshAllData();
+    res.json({ items: cachedData.items });
 
   } catch (err) {
     console.error("Items error:", err.message);
@@ -232,16 +232,11 @@ wss.on('connection', (ws) => {
   ws.onerror = (err) => console.log('WS error:', err.message);
 });
 
-// FIXED AUTO UPDATE
-setInterval(async () => {
-  console.log('🔄 Background refresh...');
-  try {
-    cachedData.lastUpdate = Date.now() - CACHE_DURATION + 1000;
-    console.log('✅ Cache refreshed');
-  } catch (err) {
-    console.log('Refresh OK');
-  }
-}, 30000);
+// 🔥 AUTO UPDATE SETIAP 15 DETIK - Deteksi perubahan Roblox
+setInterval(refreshAllData, 15000);
+
+// Initial load
+refreshAllData();
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -253,14 +248,15 @@ app.get('/health', (req, res) => {
     port: PORT,
     clients: wss.clients.size,
     items: cachedData.items.length,
-    cacheAge: Date.now() - cachedData.lastUpdate
+    cacheAge: Date.now() - cachedData.lastUpdate,
+    autoUpdate: 'ACTIVE (15s)'
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`\n🚀 Server OK on port ${PORT}`);
   console.log(`🌐 URL: ${HOST}`);
-  console.log(`✅ 100% READY - No errors!\n`);
+  console.log(`✅ AUTO-UPDATE ACTIVE - Shows ALL items + Real-time changes!\n`);
 });
 
 process.on('SIGTERM', () => {
