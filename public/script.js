@@ -1,3 +1,10 @@
+function getRarity(item){
+  if(item.limited) return "legendary";
+  if(item.price > 10000) return "epic";
+  if(item.price > 1000) return "rare";
+  return "common";
+}
+
 const API = "/api";
 
 // 🔥 ANIMASI ANGKA (ANTI NaN)
