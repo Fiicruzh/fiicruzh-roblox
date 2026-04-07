@@ -73,69 +73,35 @@ class PortfolioApp {
     this.autoRotateSpeed = 0.3;
   }
 
-  // 🔥 2D ROBLOX AVATAR - ULTRA SMOOTH 360°
-  async loadAvatar2D() {
-    try {
-      const res = await this.fetchWithRetry('/api/avatar2d');
-      const data = await res.json();
+  // 🔥 3D ROBLOX AVATAR .glb LOADER
+async loadAvatar3D() {
+  try {
+    const res = await this.fetchWithRetry('/api/avatar3d');
+    const data = await res.json();
+    
+    if (data.glb) {
+      // Load GLB dengan Three.js atau model-viewer
+      this.loadGLBModel(data.glb);
+    } else {
+      // Fallback 2D
       this.avatarImg = new Image();
       this.avatarImg.crossOrigin = 'anonymous';
       this.avatarImg.onload = () => this.animate2D();
-      this.avatarImg.src = data.image || 'https://www.roblox.com/headshot-thumbnail/image?userId=1&width=420&height=420&format=png';
-    } catch (err) {
-      console.error('Avatar load failed:', err);
-      this.avatarImg = new Image();
-      this.avatarImg.src = 'https://via.placeholder.com/200?text=ROBLOX';
+      this.avatarImg.src = data.fallback || 'https://via.placeholder.com/200?text=ROBLOX';
       this.animate2D();
     }
+  } catch (err) {
+    console.error('3D Avatar failed:', err);
+    // Fallback
+    this.avatarImg = new Image();
+    this.avatarImg.src = 'https://thumbnails.roblox.com/v1/users/avatar-headshot?userIds=' + USER_ID + '&size=420x420&format=Png';
+    this.animate2D();
   }
+}
 
-  animate2D() {
-    const canvas = document.getElementById('avatar2D');
-    
-    function render() {
-      const ctx = canvas.getContext('2d');
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      
-      // ULTRA SMOOTH ROTATION
-      app.rotationY += (app.targetRotationY - app.rotationY) * app.rotationSpeed;
-      
-      // Auto rotate when not dragging
-      if (!app.isDragging && Math.abs(app.targetRotationY - app.rotationY) < 1) {
-        app.targetRotationY += app.autoRotateSpeed;
-      }
-      
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      
-      // 360° ROTATION EFFECT
-      ctx.rotate(app.rotationY * 0.017); // Convert to radians
-      
-      // ROBLOX 2D AVATAR ENHANCEMENTS
-      // Dynamic lighting
-      const gradient = ctx.createRadialGradient(0, -40, 0, 0, 0, 120);
-      gradient.addColorStop(0, 'rgba(0,255,255,0.5)');
-      gradient.addColorStop(0.4, 'rgba(0,255,255,0.2)');
-      gradient.addColorStop(1, 'transparent');
-      ctx.fillStyle = gradient;
-      ctx.fillRect(-95, -95, 190, 190);
-      
-      // Shadow effect
-      ctx.shadowColor = 'rgba(0,0,0,0.6)';
-      ctx.shadowBlur = 25;
-      ctx.shadowOffsetX = 8;
-      ctx.shadowOffsetY = 8;
-      
-      // Draw avatar image
-      if (app.avatarImg.complete && app.avatarImg.naturalWidth > 0) {
-        ctx.drawImage(app.avatarImg, -90, -90, 180, 180);
-      }
-      
-      ctx.restore();
-      requestAnimationFrame(render);
-    }
-    render();
-  }
+// Tambahkan CDN Three.js di HTML untuk 3D
+// <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
+// <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/examples/js/loaders/GLTFLoader.js"></script>
 
   // 🔥 WEBSOCKET - CHANGE DETECTION
   connectWebSocket() {
