@@ -8,11 +8,12 @@ class PortfolioApp {
   }
 
   init() {
-    this.connectWebSocket();
-    this.loadStats();
-    this.loadAvatar();
-    this.addInteractions();
-  }
+  this.connectWebSocket();
+  this.loadStats();
+  this.loadAvatar();
+  this.loadItems();  // 🔥 TAMBAHKAN INI
+  this.addInteractions();
+}
 
   // 🔥 CHANGE DETECTION - NO AUTO REFRESH
   hasDataChanged(newData, oldData) {
