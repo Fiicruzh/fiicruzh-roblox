@@ -7,330 +7,160 @@ const WebSocket = require("ws");
 const fetch = (...args) => import('node-fetch').then(({default: fetch}) => fetch(...args));
 
 const app = express();
-app.use(cors({
-  origin: "*",
-  methods: ["GET", "POST"]
-}));
-
-// FIXED: Proper port detection
-const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
-const HOST = process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : `http://localhost:${PORT}`;
+app.use(cors({ origin: "*" }));
+const PORT = process.env.PORT || 3000;
 const server = http.createServer(app);
-const wss = new WebSocket.Server({ 
-  server,
-  perMessageDeflate: false
-});
+const wss = new WebSocket.Server({ server });
 
-// Static files
 app.use(express.static(path.join(__dirname, "public")));
 
-console.log("📁 Public folder:", path.join(__dirname, "public"));
-
-// Roblox User ID
 const USER_ID = 8941948601;
 let cachedData = {
-  stats: { friends: 0, followers: 0, following: 0 },
+  stats: { friends: 93, followers: 3, following: 2 },
   items: [],
+  lastWearIds: [],
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 15000; // 🔥 15 detik untuk auto-update cepat
+// 🔥 ULTRA SAFE FETCH
+async function safeFetch(url) {
+  try {
+    const res = await fetch(url, { 
+      timeout: 8000 
+    });
+    if (res.ok) return await res.json();
+  } catch {}
+  return null;
+}
 
-// ✅ FILTER PAKAIAN & AKSESORIS - Asset Type IDs Roblox
-const CLOTHING_ACCESSORIES_TYPES = [
-  1,  // T-Shirt
-  2,  // Shirt
-  11, // Pants
-  8,  // Hat
-  42, // Hair
-  41, // Face
-  47, // Front
-  48, // Back
-  49, // Neck
-  50, // Shoulder
-  51, // Waist
-  12, // T-Shirt (duplikat)
-  27, // Face Accessory
-  3,  // Classic Shirt
-  4   // Classic Pants
-];
+// 🔥 FASHION FILTER
+function isFashionItem(name) {
+  if (!name) return false;
+  const n = name.toLowerCase();
+  return /shirt|pants|tshirt|hat|hair|face|head|glasses|mask|shoulders|front|back|neck|waist|torso/i.test(n);
+}
 
-async function fetchWithRetry(url, retries = 3, delay = 1000) {
-  for (let i = 0; i < retries; i++) {
-    try {
-      const controller = new AbortController();
-      setTimeout(() => controller.abort(), 15000);
-      
-      const response = await fetch(url, {
-        signal: controller.signal
-      });
-      
-      if (response.ok) return response;
-    } catch (err) {
-      if (i === retries - 1) throw err;
-      await new Promise(resolve => setTimeout(resolve, delay * (i + 1)));
+// 🔥 LOAD FASHION ITEMS - DIRECT & SIMPLE
+async function loadItems() {
+  try {
+    console.log('🔄 Loading fashion items...');
+    
+    // 1. Get equipped
+    const wear = await safeFetch(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    const ids = wear?.assetIds || [];
+    
+    // 2. Check change
+    const idsStr = ids.join(',');
+    if (idsStr === cachedData.lastWearIds.join(',') && cachedData.items.length > 0) {
+      console.log('ℹ️ No item change');
+      return;
     }
+    
+    console.log(`👗 ${ids.length} equipped → filtering fashion...`);
+    
+    const newItems = [];
+    
+    // 3. Process each (parallel untuk speed)
+    const promises = ids.slice(0, 20).map(async (id) => {
+      try {
+        const detail = await safeFetch(`https://economy.roblox.com/v2/assets/${id}/details`);
+        if (isFashionItem(detail?.Name)) {
+          const thumb = await safeFetch(`https://thumbnails.roblox.com/v1/assets?assetIds=${id}&size=150x150&format=Png`);
+          return {
+            name: detail.Name || `#${id}`,
+            image: thumb?.data?.[0]?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150`,
+            link: `https://www.roblox.com/catalog/${id}/item`,
+            limited: detail?.IsLimited || false,
+            price: detail?.Price || 0
+          };
+        }
+      } catch {}
+    });
+    
+    const results = await Promise.allSettled(promises);
+    results.forEach((result, i) => {
+      if (result.status === 'fulfilled' && result.value) {
+        newItems.push(result.value);
+      }
+    });
+    
+    // 4. Update cache
+    cachedData.items = newItems;
+    cachedData.lastWearIds = ids;
+    cachedData.lastUpdate = Date.now();
+    
+    console.log(`✅ Fashion items LOADED: ${newItems.length}`);
+    broadcast({ items: newItems });
+    
+  } catch (err) {
+    console.error('❌ Load error:', err.message);
   }
 }
 
-// 🔥 AUTO UPDATE FUNCTION - HANYA PAKAIAN & AKSESORIS (FIXED ERROR HANDLING)
-async function refreshAllData() {
-  console.log('🔄 [AUTO] Checking Roblox updates (Clothing+Accessories only)...');
-  
+// 🔥 STATS SIMPLE
+async function loadStats() {
   try {
-    // 1. Refresh Stats
-    const [friendsRes, followersRes, followingRes] = await Promise.allSettled([
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
-      fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
+    const [friends, followers, following] = await Promise.allSettled([
+      safeFetch(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
+      safeFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
+      safeFetch(`https://friends.roblox.com/v1/users/${USER_ID}/followings/count`)
     ]);
-
-    const newStats = {
-      friends: 0,
-      followers: 0,
-      following: 0
-    };
-
-    if (friendsRes.status === 'fulfilled' && friendsRes.value) {
-      try { 
-        const data = await friendsRes.value.json();
-        newStats.friends = data?.count || 0; 
-      } catch {}
-    }
-    if (followersRes.status === 'fulfilled' && followersRes.value) {
-      try { 
-        const data = await followersRes.value.json();
-        newStats.followers = data?.count || 0; 
-      } catch {}
-    }
-    if (followingRes.status === 'fulfilled' && followingRes.value) {
-      try { 
-        const data = await followingRes.value.json();
-        newStats.following = data?.count || 0; 
-      } catch {}
-    }
-
-    // 2. Refresh Items - HANYA PAKAIAN & AKSESORIS (FIXED)
-    let wearRes;
-    try {
-      wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-      if (!wearRes || !wearRes.ok) throw new Error('Wear API failed');
-    } catch (err) {
-      console.log('❌ Wear API failed:', err.message);
-      return; // Skip jika gagal load avatar
-    }
     
-    const wear = await wearRes.json();
-    let allIds = wear.assetIds || [];
-    console.log(`👕 [AUTO] Found ${allIds.length} equipped items (filtering clothing+accessories)`);
-
-    // 🔥 FILTER HANYA PAKAIAN & AKSESORIS
-    let filteredIds = [];
-    let newItems = [];
-
-    if (allIds.length > 0) {
-      // Batch fetch details untuk semua items (SAFE HANDLING)
-      const detailsPromises = allIds.map(async (id) => {
-        try {
-          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`, 1, 300);
-          if (detailRes && detailRes.ok) {
-            return await detailRes.json();
-          }
-        } catch (err) {
-          console.log(`⚠️ Detail failed for ${id}`);
-        }
-        return null;
-      });
-      
-      const detailsResults = await Promise.all(detailsPromises);
-      
-      // Filter berdasarkan AssetTypeId
-      for (let i = 0; i < allIds.length; i++) {
-        const detail = detailsResults[i];
-        const assetTypeId = detail?.AssetTypeId;
-        
-        if (assetTypeId && CLOTHING_ACCESSORIES_TYPES.includes(assetTypeId)) {
-          filteredIds.push(allIds[i]);
-        }
-      }
-
-      console.log(`👗 Filtered: ${filteredIds.length}/${allIds.length} clothing+accessories items`);
-
-      if (filteredIds.length > 0) {
-        // 🔥 Batch thumbnails untuk filtered items
-        let thumbs = [];
-        try {
-          const thumbsRes = await fetchWithRetry(
-            `https://thumbnails.roblox.com/v1/assets?assetIds=${filteredIds.join(",")}&size=150x150&format=Png`,
-            2, 500
-          );
-          if (thumbsRes && thumbsRes.ok) {
-            thumbs = await thumbsRes.json();
-          }
-        } catch (e) {
-          console.log('⚠️ Thumbs batch failed');
-        }
-
-        // Process filtered items (SAFE)
-        for (let i = 0; i < filteredIds.length; i++) {
-          const id = filteredIds[i];
-          const detail = detailsResults.find(d => d && String(d.AssetId) === String(id));
-          
-          try {
-            const thumb = thumbs.data?.find(t => t.targetId == id);
-
-            newItems.push({
-              name: detail?.Name || `Item #${String(id).slice(-4)}`,
-              image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-              link: `https://www.roblox.com/catalog/${id}/item`,
-              limited: detail?.IsLimited || detail?.IsLimitedUnique || false,
-              type: detail?.AssetTypeId || 0
-            });
-
-          } catch (itemErr) {
-            console.log(`⚠️ Item process error ${id}:`, itemErr.message);
-            const idStr = String(id);
-            newItems.push({
-              name: `Item #${idStr.slice(-4)}`,
-              image: `https://via.placeholder.com/150x150/333/aaa?text=#${idStr.slice(-4)}`,
-              link: `https://www.roblox.com/catalog/${id}`,
-              limited: false,
-              type: 0
-            });
-          }
-        }
-      }
-    }
-
-    // 🔥 DETEKSI PERUBAHAN - Hanya update jika berbeda
-    const statsChanged = JSON.stringify(newStats) !== JSON.stringify(cachedData.stats);
-    const itemsChanged = JSON.stringify(newItems) !== JSON.stringify(cachedData.items);
-
-    if (statsChanged || itemsChanged) {
-      cachedData.stats = newStats;
-      cachedData.items = newItems;
-      cachedData.lastUpdate = Date.now();
-      
-      console.log(`✅ [AUTO] UPDATED! Stats:${statsChanged?'✓':'-'} Items:${itemsChanged?'✓':'-'} (${newItems.length} clothing+accessories)`);
-      
-      // 🔥 BROADCAST perubahan ke semua client
-      if (statsChanged) broadcast({ stats: newStats });
-      if (itemsChanged) broadcast({ items: newItems });
-    } else {
-      console.log('ℹ️ [AUTO] No changes - clothing+accessories same');
-    }
-
-  } catch (err) {
-    console.error('❌ [AUTO] Refresh failed:', err.message);
-  }
+    cachedData.stats = {
+      friends: friends.status === 'fulfilled' ? friends.value.count || 0 : cachedData.stats.friends,
+      followers: followers.status === 'fulfilled' ? followers.value.count || 0 : cachedData.stats.followers,
+      following: following.status === 'fulfilled' ? following.value.count || 0 : cachedData.stats.following
+    };
+    
+    broadcast({ stats: cachedData.stats });
+    console.log(`✅ Stats: F${cachedData.stats.friends} FL${cachedData.stats.followers}`);
+  } catch {}
 }
 
-app.get("/api", async (req, res) => {
-  try {
-    const now = Date.now();
-    
-    if (now - cachedData.lastUpdate < CACHE_DURATION) {
-      return res.json(cachedData.stats);
-    }
-
-    console.log('🔄 Fetching stats...');
-    await refreshAllData();
-    res.json(cachedData.stats);
-
-  } catch (err) {
-    console.error("Stats error:", err.message);
-    res.json(cachedData.stats);
-  }
+// 🔥 API ROUTES
+app.get('/api', (req, res) => res.json(cachedData.stats));
+app.get('/api/items', async (req, res) => {
+  await loadItems();
+  res.json({ items: cachedData.items });
 });
-
-app.get("/api/avatar", async (req, res) => {
+app.get('/api/avatar', async (req, res) => {
   try {
-    const avatarRes = await fetchWithRetry(
-      `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
-    );
-    
-    if (avatarRes && avatarRes.ok) {
-      const avatar = await avatarRes.json();
-      console.log('✅ Avatar OK');
-      res.json({
-        image: avatar.data?.[0]?.imageUrl || null
-      });
-    } else {
-      res.json({ image: null });
-    }
-  } catch (err) {
-    console.error("Avatar error:", err.message);
+    const avatar = await safeFetch(`https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png`);
+    res.json({ image: avatar?.data?.[0]?.imageUrl });
+  } catch {
     res.json({ image: null });
   }
 });
 
-app.get("/api/items", async (req, res) => {
-  try {
-    const now = Date.now();
-    
-    if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
-      console.log(`📦 Cache hit: ${cachedData.items.length} clothing+accessories items`);
-      return res.json({ items: cachedData.items });
-    }
-
-    console.log('🔄 Fetching clothing+accessories items...');
-    await refreshAllData();
-    res.json({ items: cachedData.items });
-
-  } catch (err) {
-    console.error("Items error:", err.message);
-    res.json({ items: cachedData.items || [] });
-  }
-});
-
+// 🔥 WEBSOCKET
 function broadcast(data) {
-  console.log(`📡 Broadcast:`, Object.keys(data));
-  
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
-      try {
-        client.send(JSON.stringify(data));
-      } catch (err) {}
+      client.send(JSON.stringify(data));
     }
   });
 }
 
 wss.on('connection', (ws) => {
-  console.log(`👤 Connected: ${wss.clients.size} total`);
+  console.log(`👤 Client ${wss.clients.size}`);
   ws.send(JSON.stringify(cachedData));
-
-  ws.on('close', () => console.log(`👋 Disconnected: ${wss.clients.size}`));
-  ws.onerror = (err) => console.log('WS error:', err.message);
 });
 
-// 🔥 AUTO UPDATE SETIAP 15 DETIK - Hanya Clothing + Accessories
-setInterval(refreshAllData, 15000);
+// 🔥 AUTO UPDATE EVERY 15s
+setInterval(loadItems, 15000);
+setInterval(loadStats, 30000);
 
-// Initial load
-refreshAllData();
+// 🔥 FORCE LOAD ON START
+loadItems();
+setTimeout(loadItems, 3000);
+setTimeout(loadStats, 1000);
 
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+app.get('*', (req, res) => {
+  res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    port: PORT,
-    clients: wss.clients.size,
-    items: cachedData.items.length,
-    clothingAccessoriesOnly: true,
-    cacheAge: Date.now() - cachedData.lastUpdate,
-    autoUpdate: 'ACTIVE (15s)'
-  });
-});
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 Server OK on port ${PORT}`);
-  console.log(`🌐 URL: ${HOST}`);
-  console.log(`✅ AUTO-UPDATE ACTIVE - Shows CLOTHING + ACCESSORIES only + Real-time changes!\n`);
-});
-
-process.on('SIGTERM', () => {
-  server.close(() => process.exit(0));
+server.listen(PORT, () => {
+  console.log(`\n🚀 FASHION PORTFOLIO on port ${PORT}`);
+  console.log(`🌐 ${HOST}`);
+  console.log('✅ Items loading... Fashion only!');
 });
