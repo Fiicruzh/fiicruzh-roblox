@@ -12,7 +12,6 @@ app.use(cors({
   methods: ["GET", "POST"]
 }));
 
-// FIXED: Proper port detection
 const PORT = process.env.PORT || process.env.RAILWAY_PORT || 3000;
 const HOST = process.env.RAILWAY_STATIC_URL ? `https://${process.env.RAILWAY_STATIC_URL}` : `http://localhost:${PORT}`;
 const server = http.createServer(app);
@@ -21,20 +20,19 @@ const wss = new WebSocket.Server({
   perMessageDeflate: false
 });
 
-// Static files
 app.use(express.static(path.join(__dirname, "public")));
-
 console.log("📁 Public folder:", path.join(__dirname, "public"));
 
-// Roblox User ID
 const USER_ID = 8941948601;
 let cachedData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: [],
+  avatarHash: null,
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 15000; // 🔥 15 detik untuk auto-update cepat
+const CACHE_DURATION = 30000;
+const AVATAR_CHECK_INTERVAL = 10000;
 
 async function fetchWithRetry(url, retries = 3, delay = 1000) {
   for (let i = 0; i < retries; i++) {
@@ -54,12 +52,120 @@ async function fetchWithRetry(url, retries = 3, delay = 1000) {
   }
 }
 
-// 🔥 AUTO UPDATE FUNCTION - Deteksi perubahan Roblox REAL-TIME
-async function refreshAllData() {
-  console.log('🔄 [AUTO] Checking Roblox updates...');
+// 🔥 FILTER: HANYA AKSESORIS + PAKAIAN
+function isAccessoryOrClothing(detail) {
+  if (!detail || !detail.Name) return false;
   
+  const name = detail.Name.toLowerCase();
+  
+  // ✅ AKSESORIS & PAKAIAN SAJA
+  const fashionCategories = [
+    // PAKAIAN
+    'shirt', 't-shirt', 'tshirt', 'pants', 'trousers',
+    // AKSESORIS
+    'hat', 'hair', 'face', 'head', 'glasses', 'mask',
+    'shoulders', 'front', 'back', 'neck', 'waist',
+    // TORSO
+    'classicclothingtorso', 'torso'
+  ];
+  
+  return fashionCategories.some(category => name.includes(category));
+}
+
+// 🔥 SMART AVATAR DETECTION + FASHION FILTER
+async function checkAvatarAndUpdate() {
   try {
-    // 1. Refresh Stats
+    console.log('🔍 [FASHION] Checking avatar + accessories/clothing...');
+    
+    // Cek avatar hash
+    const avatarRes = await fetchWithRetry(
+      `https://avatar.roblox.com/v1/users/${USER_ID}/avatar`
+    );
+    const avatarData = await avatarRes.json();
+    const currentAvatarHash = avatarData.hash || avatarData.lastUpdateTime;
+    
+    if (currentAvatarHash === cachedData.avatarHash) {
+      console.log('ℹ️ [FASHION] Avatar unchanged');
+      return false;
+    }
+    
+    console.log('🎉 [FASHION] AVATAR CHANGED! Loading accessories/clothing...');
+    cachedData.avatarHash = currentAvatarHash;
+    
+    // Fetch equipped items
+    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    const wear = await wearRes.json();
+    let ids = wear.assetIds || [];
+    
+    let newItems = [];
+    let thumbs = [];
+    
+    if (ids.length > 0) {
+      // Batch thumbnails
+      try {
+        const thumbsRes = await fetchWithRetry(
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
+        );
+        thumbs = await thumbsRes.json();
+      } catch (e) {
+        console.log('Thumbs failed');
+      }
+
+      // 🔥 FILTER AKSESORIS + PAKAIAN
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        try {
+          const detailRes = await fetchWithRetry(
+            `https://economy.roblox.com/v2/assets/${id}/details`,
+            2, 500
+          );
+          const detail = await detailRes.json();
+          
+          // ✅ HANYA aksesoris/pakaian
+          if (isAccessoryOrClothing(detail)) {
+            const thumb = thumbs.data?.find(t => t.targetId == id);
+            newItems.push({
+              name: detail.Name || `Item #${String(id).slice(-4)}`,
+              image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
+              link: `https://www.roblox.com/catalog/${id}/item`,
+              price: detail.Price || 0,
+              limited: detail.IsLimited || detail.IsLimitedUnique || false,
+              rarity: detail.IsLimited ? 'legendary' : 
+                     (detail.Price && detail.Price > 10000) ? 'epic' : 'rare'
+            });
+          }
+        } catch {
+          // Skip error items
+        }
+      }
+    }
+    
+    // Sort by equipped order (index 0 = equipped)
+    newItems.sort((a, b) => {
+      const aIndex = ids.findIndex(id => id == a.link.split('/')[4]);
+      const bIndex = ids.findIndex(id => id == b.link.split('/')[4]);
+      return aIndex - bIndex;
+    });
+    
+    const itemsChanged = JSON.stringify(newItems) !== JSON.stringify(cachedData.items);
+    cachedData.items = newItems;
+    cachedData.lastUpdate = Date.now();
+    
+    console.log(`✅ [FASHION] Accessories/Clothing: ${newItems.length} items`);
+    if (itemsChanged) {
+      broadcast({ items: newItems });
+    }
+    
+    return true;
+    
+  } catch (err) {
+    console.error('❌ [FASHION] Failed:', err.message);
+    return false;
+  }
+}
+
+async function updateStats() {
+  try {
     const [friendsRes, followersRes, followingRes] = await Promise.allSettled([
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/friends/count`),
       fetchWithRetry(`https://friends.roblox.com/v1/users/${USER_ID}/followers/count`),
@@ -82,96 +188,23 @@ async function refreshAllData() {
       try { newStats.following = (await followingRes.value.json()).count || 0; } catch {}
     }
 
-    // 2. Refresh ALL Items (TIDAK DI BATASI 12 lagi!)
-    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    const wear = await wearRes.json();
-    let ids = wear.assetIds || [];
-    console.log(`👕 [AUTO] Found ${ids.length} equipped items`);
-
-    let newItems = [];
-    if (ids.length > 0) {
-      // 🔥 Batch thumbnails untuk SEMUA items
-      let thumbs = [];
-      try {
-        const thumbsRes = await fetchWithRetry(
-          `https://thumbnails.roblox.com/v1/assets?assetIds=${ids.join(",")}&size=150x150&format=Png`
-        );
-        thumbs = await thumbsRes.json();
-      } catch (e) {
-        console.log('Thumbs batch failed');
-      }
-
-      // 🔥 Process SEMUA items (tanpa slice(0,12))
-      for (let i = 0; i < ids.length; i++) {
-        const id = ids[i];
-        try {
-          const detailRes = await fetchWithRetry(
-            `https://economy.roblox.com/v2/assets/${id}/details`,
-            2, 500
-          );
-          const detail = await detailRes.json();
-
-          const thumb = thumbs.data?.find(t => t.targetId == id);
-
-          newItems.push({
-            name: detail.Name || `Item #${String(id).slice(-4)}`,
-            image: thumb?.imageUrl || `https://www.roblox.com/asset-thumbnail/image?assetId=${id}&width=150&height=150&format=png`,
-            link: `https://www.roblox.com/catalog/${id}/item`,
-            limited: detail.IsLimited || detail.IsLimitedUnique || false
-          });
-
-        } catch (itemErr) {
-          // FIXED: Safe string conversion
-          const idStr = String(id);
-          newItems.push({
-            name: `Item #${idStr.slice(-4)}`,
-            image: `https://via.placeholder.com/150x150/333/aaa?text=#${idStr.slice(-4)}`,
-            link: `https://www.roblox.com/catalog/${id}`,
-            limited: false
-          });
-        }
-      }
-    }
-
-    // 🔥 DETEKSI PERUBAHAN - Hanya update jika berbeda
     const statsChanged = JSON.stringify(newStats) !== JSON.stringify(cachedData.stats);
-    const itemsChanged = JSON.stringify(newItems) !== JSON.stringify(cachedData.items);
-
-    if (statsChanged || itemsChanged) {
+    if (statsChanged) {
       cachedData.stats = newStats;
-      cachedData.items = newItems;
-      cachedData.lastUpdate = Date.now();
-      
-      console.log(`✅ [AUTO] UPDATED! Stats:${statsChanged?'✓':'-'} Items:${itemsChanged?'✓':'-'} (${newItems.length} items)`);
-      
-      // 🔥 BROADCAST perubahan ke semua client
-      if (statsChanged) broadcast({ stats: newStats });
-      if (itemsChanged) broadcast({ items: newItems });
-    } else {
-      console.log('ℹ️ [AUTO] No changes - items same');
+      console.log(`✅ Stats: F${newStats.friends} FL${newStats.followers} FG${newStats.following}`);
+      broadcast({ stats: newStats });
     }
-
   } catch (err) {
-    console.error('❌ [AUTO] Refresh failed:', err.message);
+    console.error('Stats failed:', err.message);
   }
 }
 
 app.get("/api", async (req, res) => {
-  try {
-    const now = Date.now();
-    
-    if (now - cachedData.lastUpdate < CACHE_DURATION) {
-      return res.json(cachedData.stats);
-    }
-
-    console.log('🔄 Fetching stats...');
-    await refreshAllData();
-    res.json(cachedData.stats);
-
-  } catch (err) {
-    console.error("Stats error:", err.message);
-    res.json(cachedData.stats);
+  if (Date.now() - cachedData.lastUpdate < CACHE_DURATION) {
+    return res.json(cachedData.stats);
   }
+  await updateStats();
+  res.json(cachedData.stats);
 });
 
 app.get("/api/avatar", async (req, res) => {
@@ -179,64 +212,45 @@ app.get("/api/avatar", async (req, res) => {
     const avatarRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/users/avatar?userIds=${USER_ID}&size=420x420&format=Png&isCircular=false`
     );
-    
     const avatar = await avatarRes.json();
-    console.log('✅ Avatar OK');
-    
-    res.json({
-      image: avatar.data?.[0]?.imageUrl || null
-    });
-
+    res.json({ image: avatar.data?.[0]?.imageUrl || null });
   } catch (err) {
-    console.error("Avatar error:", err.message);
     res.json({ image: null });
   }
 });
 
 app.get("/api/items", async (req, res) => {
-  try {
-    const now = Date.now();
-    
-    if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
-      console.log(`📦 Cache hit: ${cachedData.items.length} items`);
-      return res.json({ items: cachedData.items });
-    }
-
-    console.log('🔄 Fetching items...');
-    await refreshAllData();
-    res.json({ items: cachedData.items });
-
-  } catch (err) {
-    console.error("Items error:", err.message);
-    res.json({ items: cachedData.items || [] });
+  if (Date.now() - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
+    return res.json({ items: cachedData.items });
   }
+  await checkAvatarAndUpdate();
+  res.json({ items: cachedData.items });
 });
 
 function broadcast(data) {
-  console.log(`📡 Broadcast:`, Object.keys(data));
-  
+  console.log(`📡 Fashion broadcast:`, Object.keys(data));
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
       try {
         client.send(JSON.stringify(data));
-      } catch (err) {}
+      } catch {}
     }
   });
 }
 
 wss.on('connection', (ws) => {
-  console.log(`👤 Connected: ${wss.clients.size} total`);
+  console.log(`👤 Connected: ${wss.clients.size}`);
   ws.send(JSON.stringify(cachedData));
-
   ws.on('close', () => console.log(`👋 Disconnected: ${wss.clients.size}`));
-  ws.onerror = (err) => console.log('WS error:', err.message);
 });
 
-// 🔥 AUTO UPDATE SETIAP 15 DETIK - Deteksi perubahan Roblox
-setInterval(refreshAllData, 15000);
+// 🔥 Smart intervals
+setInterval(checkAvatarAndUpdate, AVATAR_CHECK_INTERVAL);
+setInterval(updateStats, 30000);
 
 // Initial load
-refreshAllData();
+checkAvatarAndUpdate();
+updateStats();
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
@@ -245,18 +259,17 @@ app.get("*", (req, res) => {
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
-    port: PORT,
-    clients: wss.clients.size,
-    items: cachedData.items.length,
-    cacheAge: Date.now() - cachedData.lastUpdate,
-    autoUpdate: 'ACTIVE (15s)'
+    fashionItems: cachedData.items.length,
+    filter: 'ACCESSORIES+CLOTHING',
+    avatarHash: cachedData.avatarHash?.slice(-8) || 'none',
+    autoUpdate: 'SMART'
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`\n🚀 Server OK on port ${PORT}`);
+  console.log(`\n🚀 Fashion Server OK on port ${PORT}`);
   console.log(`🌐 URL: ${HOST}`);
-  console.log(`✅ AUTO-UPDATE ACTIVE - Shows ALL items + Real-time changes!\n`);
+  console.log(`✅ SHOWS ONLY: Accessories + Clothing | Smart Avatar Updates!\n`);
 });
 
 process.on('SIGTERM', () => {
