@@ -126,7 +126,7 @@ body{
   transition: all 0.3s ease;
   display: inline-block;
   width: 100%;
-  box-sizing: border-box;
+  justify-content: center;
 }
 
 .copy-btn:hover {
@@ -204,7 +204,8 @@ body{
   font-size:13px;
   font-family: 'Orbitron', sans-serif;
   transition:.3s;
-  box-sizing: border-box;
+  flex: 1;
+  min-height: 44px;
 }
 
 .btn:hover{
@@ -225,12 +226,29 @@ body{
 .qr-btn{
   width:48px;
   min-width:48px;
+  flex: none;
+}
+
+/* ✅ DISCORD BUTTON - RAPiH & TIDAK MELEBIHI BATAS */
+.discord-section {
+  margin-top: 12px;
+  padding: 12px 0;
+  border-top: 1px solid rgba(0,255,255,0.2);
 }
 
 .discord-btn{
-  margin-top:10px;
-  width:100%;
-  justify-content:center;
+  width:100% !important;
+  background: rgba(88,101,242,0.1);
+  border-color: #5865F2;
+  color: #5865F2;
+  font-weight: 600;
+  justify-content: center;
+}
+
+.discord-btn:hover {
+  background: #5865F2;
+  color: white;
+  box-shadow: 0 0 15px #5865F2;
 }
 
 @media(max-width:480px){
@@ -238,9 +256,19 @@ body{
     flex-direction:column;
     text-align:center;
   }
+  
+  .button-row {
+    flex-direction: column;
+  }
+  
+  .qr-btn {
+    width: 100%;
+    min-width: auto;
+    margin-top: 8px;
+  }
 }
 
-/* 🔥 ROBLOX ITEMS - HORIZONTAL SCROLL GRID */
+/* ROBLOX ITEMS - CYAN HORIZONTAL SCROLL */
 .items-section{
   margin-top:15px;
 }
@@ -252,127 +280,95 @@ body{
   margin-bottom:8px;
 }
 
-/* GANTI BAGIAN .items-grid DAN .item-category SAJA */
-
-.items-grid{
-  display: flex;
-  gap: 10px;
-  overflow-x: auto;
-  overflow-y: hidden;
-  padding: 12px 8px;
-  scroll-behavior: smooth;
-  min-height: 110px;
+.items-container{
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  min-height:100px;
+  padding:8px 0;
   scrollbar-width: thin;
   scrollbar-color: cyan transparent;
-  scroll-snap-type: x proximity;
+  scroll-snap-type: x mandatory;
 }
 
-.items-grid::-webkit-scrollbar {
+.items-container::-webkit-scrollbar {
   height: 4px;
 }
 
-.items-grid::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.4);
-  border-radius: 2px;
+.items-container::-webkit-scrollbar-track {
+  background: transparent;
 }
 
-.items-grid::-webkit-scrollbar-thumb {
+.items-container::-webkit-scrollbar-thumb {
   background: linear-gradient(90deg, cyan, #00ff88);
   border-radius: 2px;
-  box-shadow: 0 0 4px rgba(0,255,255,0.5);
 }
 
-.items-grid::-webkit-scrollbar-thumb:hover {
-  background: linear-gradient(90deg, #00ff88, cyan);
-}
-
-/* HANYA EQUIPPED ITEMS - TIDAK ADA SLOT KOSONG */
-.item-category{
-  flex: 0 0 88px;
-  background: rgba(0,255,255,0.12);
-  border: 2px solid rgba(0,255,255,0.3);
-  border-radius: 12px;
-  padding: 8px 4px;
-  text-align: center;
-  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-  position: relative;
-  height: 100px;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  cursor: pointer;
-  backdrop-filter: blur(12px);
+.item-card{
+  min-width:85px;
+  flex: 0 0 85px;
+  background:rgba(0,255,255,0.05);
+  border:1px solid rgba(0,255,255,0.2);
+  border-radius:10px;
+  padding:6px;
+  text-align:center;
+  cursor:pointer;
+  transition:0.3s;
+  position:relative;
   scroll-snap-align: start;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
-.item-category:hover{
-  transform: translateY(-4px) scale(1.05);
-  background: rgba(0,255,255,0.25);
-  border-color: cyan;
-  box-shadow: 0 8px 25px rgba(0,255,255,0.4);
-  z-index: 20;
+.item-card:hover{
+  transform:scale(1.05);
+  box-shadow:0 0 15px cyan;
 }
 
-.item-category img{
-  width: 100%;
-  max-width: 72px;
-  height: 68px;
-  object-fit: cover;
-  border-radius: 8px;
-  background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
-  image-rendering: -webkit-optimize-contrast;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+.item-card img{
+  width:100%;
+  height:65px;
+  object-fit:cover;
+  border-radius:6px;
 }
 
-.item-category.equipped{
-  border: 2px solid #00ff88;
-  background: linear-gradient(145deg, rgba(0,255,136,0.2), rgba(0,255,255,0.1));
-  box-shadow: 0 0 20px rgba(0,255,136,0.5), 0 4px 15px rgba(0,0,0,0.4);
+/* ✅ HAPUS NAMA ITEM */
+.item-name {
+  display: none !important;
 }
 
-.item-category.equipped::after{
-  content: "✓";
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  background: linear-gradient(145deg, #00ff88, #00cc66);
-  color: black;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 12px;
-  font-weight: bold;
-  box-shadow: 0 2px 6px rgba(0,255,136,0.6);
-  border: 1px solid rgba(255,255,255,0.3);
+.equipped{
+  position:absolute;
+  top:4px;
+  left:4px;
+  font-size:8px;
+  background:lime;
+  color:black;
+  padding:2px 4px;
+  border-radius:4px;
+  font-weight:bold;
+  box-shadow:0 0 5px lime;
+  animation: pulse 1s infinite;
 }
-
-/* TIDAK ADA .item-category.empty - SLOT KOSONG DIHILANGKAN */
 
 .loading-smooth{
-  flex: 0 0 88px;
-  height: 100px;
-  border-radius: 12px;
-  background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
-  animation: loading-smooth 1.5s ease-in-out infinite;
-  position: relative;
-  overflow: hidden;
-  border: 2px solid rgba(0,255,255,0.3);
+  min-width:85px;
+  flex: 0 0 85px;
+  height:85px;
+  border-radius:10px;
+  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  animation:loading-smooth 1.5s ease-in-out infinite;
+  position:relative;
+  overflow:hidden;
 }
 
 .loading-smooth::after{
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -100%;
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.15), transparent);
-  animation: shimmer 1.5s infinite;
+  content:"";
+  position:absolute;
+  top:0;
+  left:-100%;
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg, transparent, rgba(0,255,255,0.2), transparent);
+  animation:shimmer 1.5s infinite;
 }
 
 @keyframes loading-smooth{
@@ -387,9 +383,26 @@ body{
 
 #liveIndicator {
   animation: pulse 2s infinite;
+  font-size: 12px;
 }
 
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
+}
+
+/* PERFECT ITEM IMAGES */
+.item-card img {
+  width: 100% !important;
+  height: 65px !important;
+  object-fit: cover !important;
+  border-radius: 6px !important;
+  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%) !important;
+  transition: all 0.3s ease !important;
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.item-card img[src*="placeholder"] {
+  background: linear-gradient(90deg, #0f3460 0%, #00ff88 50%, #0f3460 100%) !important;
+  animation: shimmer 2s infinite !important;
 }
