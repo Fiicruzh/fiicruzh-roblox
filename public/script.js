@@ -14,14 +14,14 @@ class PortfolioApp {
     this.addInteractions();
   }
 
-  // 🔥 SMART WEBSOCKET - INSTANT UPDATE
+  // 🔥 SMART WEBSOCKET - NO SPAM
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected - INSTANT LOAD');
+      console.log('✅ WebSocket connected');
       document.getElementById('liveIndicator').textContent = '🟢';
     };
 
@@ -37,15 +37,16 @@ class PortfolioApp {
     this.ws.onclose = () => {
       console.log('❌ WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
-      setTimeout(() => this.connectWebSocket(), 3000); // Faster reconnect
+      // Auto reconnect after 5s
+      setTimeout(() => this.connectWebSocket(), 5000);
     };
   }
 
-  // 🔥 AUTO UPDATE ONLY IF CHANGED
+  // 🔥 UPDATE ONLY IF CHANGED
   updateIfChanged(newData) {
     let hasChanges = false;
 
-    // Stats update
+    // Stats check
     if (newData.stats) {
       const statsChanged = JSON.stringify(newData.stats) !== JSON.stringify(this.lastData.stats);
       if (statsChanged) {
@@ -57,24 +58,24 @@ class PortfolioApp {
       }
     }
 
-    // Items update - INSTANT REFRESH
+    // Items check
     if (newData.items) {
       const itemsChanged = JSON.stringify(newData.items) !== JSON.stringify(this.lastData.items);
       if (itemsChanged) {
         this.renderItems(newData.items);
         this.lastData.items = newData.items;
         hasChanges = true;
-        console.log('🎯 Items auto-updated:', newData.items.length);
       }
     }
 
     if (hasChanges) {
       document.getElementById('liveIndicator').textContent = '🟢';
+      console.log('✅ Data updated');
     }
   }
 
   async loadInitialData() {
-    // Avatar INSTANT
+    // Load avatar
     try {
       const res = await fetch('/api/avatar');
       const data = await res.json();
@@ -83,10 +84,10 @@ class PortfolioApp {
       console.error('Avatar load failed');
     }
 
-    // Stats
+    // Load stats
     this.loadStats();
 
-    // Items - INSTANT LOAD
+    // Load items
     this.loadItems();
   }
 
@@ -105,7 +106,7 @@ class PortfolioApp {
 
   async loadItems() {
     const container = document.getElementById("itemsContainer");
-    container.innerHTML = Array(10).fill().map(() => 
+    container.innerHTML = Array(8).fill().map(() => 
       '<div class="loading-smooth"></div>'
     ).join('');
 
@@ -120,28 +121,27 @@ class PortfolioApp {
     }
   }
 
-  // 🔥 RENDER ITEMS - NO NAME + ONLY PAKAIAN/AKSESORIS + 4 EQUIPPED
   renderItems(items) {
-    const container = document.getElementById("itemsContainer");
-    if (!items?.length) {
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
-      return;
-    }
-
-    // Show first 4 as EQUIPPED, rest normal
-    container.innerHTML = items.map((item, i) => {
-      const isEquipped = i < 4;
-      return `
-        <div class="item-card" onclick="window.open('${item.link}', '_blank')">
-          ${isEquipped ? '<div class="equipped">ON</div>' : ''}
-          <img src="${item.image}" 
-               onerror="this.onerror=null;this.src='https://via.placeholder.com/85x65/0f0f23/00ff88?text=✓';"
-               loading="lazy"
-               alt="Item">
-        </div>
-      `;
-    }).join('');
+  const container = document.getElementById("itemsContainer");
+  if (!items?.length) {
+    container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+    return;
   }
+
+  container.innerHTML = items.map((item, i) => {
+    return `
+      <div class="item-card" onclick="window.open('${item.link}', '_blank')">
+        ${i < 4 ? '<div class="equipped">ON</div>' : ''}
+        <img src="${item.image}" 
+             onerror="this.onerror=null;this.src='https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓';"
+             loading="lazy"
+             alt="${item.name}"
+             style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);">
+        <div class="item-name">${item.name}</div>
+      </div>
+    `;
+  }).join('');
+}
 
   animate(el, end) {
     end = Number(end) || 0;
@@ -162,13 +162,13 @@ class PortfolioApp {
   }
 
   addInteractions() {
-    // Copy button
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('@dapaarowr4').then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.classList.add('copied');
-        btn.innerHTML = '✅ Copied!';
-        
+  // Copy button
+  document.getElementById('copyBtn').onclick = () => {
+    navigator.clipboard.writeText('@dapaarowr4').then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.classList.add('copied');
+      btn.innerHTML = '✅ Copied!';
+      
         setTimeout(() => {
           btn.classList.remove('copied');
           btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
