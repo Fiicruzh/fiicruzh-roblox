@@ -96,7 +96,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API - 100% REAL NAMES + IMAGES GUARANTEE
+// 🔥 ITEMS API - BULLETPROOF FIX
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -104,113 +104,135 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🔥 Loading ALL equipped items with REAL names & images...');
+    console.log('🔥 Loading ALL equipped items...');
 
-    // Get equipped items
+    // Get equipped items - BULLETPROOF
     let wearData = { assetIds: [] };
     const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    if (wearRes) wearData = await wearRes.json();
+    if (wearRes) {
+      try {
+        wearData = await wearRes.json();
+      } catch (e) {
+        console.log('Wear parse error:', e.message);
+      }
+    }
 
-    let equippedIds = wearData.assetIds?.filter(id => id) || [];
-    
+    // CLEAN IDs ONLY (numbers only)
+    let equippedIds = (wearData.assetIds || [])
+      .map(id => Number(id))
+      .filter(id => !isNaN(id) && id > 0 && id.toString().length > 3)
+      .slice(0, 18);
+
+    console.log(`🎒 Clean IDs (${equippedIds.length}):`, equippedIds.slice(0, 5));
+
     // Backup outfit
     if (equippedIds.length < 5) {
       const outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
       if (outfitRes) {
-        const outfit = await outfitRes.json();
-        if (outfit.assets) {
-          outfit.assets.forEach(asset => asset?.id && equippedIds.push(asset.id));
-        }
+        try {
+          const outfit = await outfitRes.json();
+          if (outfit.assets) {
+            outfit.assets.forEach(asset => {
+              const id = Number(asset?.id);
+              if (!isNaN(id) && id > 0) equippedIds.push(id);
+            });
+          }
+        } catch (e) {}
       }
     }
 
     equippedIds = [...new Set(equippedIds)].slice(0, 18);
-    console.log(`🎒 ${equippedIds.length} IDs:`, equippedIds.slice(0, 5));
+    
+    if (!equippedIds.length) {
+      console.log('❌ No valid items found');
+      return res.json({ items: [] });
+    }
 
-    if (!equippedIds.length) return res.json({ items: [] });
-
-    // 🔥 PRE-CACHE THUMBNAILS (BATCH)
+    // 🔥 THUMBNAILS BATCH
     const thumbRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/assets?assetIds=${equippedIds.join(',')}&size=150x150&format=Png`
     );
     let thumbs = {};
     if (thumbRes) {
-      const thumbData = await thumbRes.json();
-      thumbData.data?.forEach(t => {
-        thumbs[t.targetId] = t.imageUrl;
-      });
+      try {
+        const thumbData = await thumbRes.json();
+        thumbData.data?.forEach(t => {
+          thumbs[t.targetId] = t.imageUrl;
+        });
+      } catch (e) {}
     }
 
-    // 🔥 BATCH CATALOG NAMES (PARALLEL - SUPER FAST)
-    const items = await Promise.all(equippedIds.map(async (assetId) => {
+    // 🔥 PROCESS ITEMS (SAFE)
+    const items = [];
+    for (const assetId of equippedIds) {
       try {
-        // PRIORITY #1: CATALOG API (REAL NAME)
-        let name = `Item #${assetId.slice(-6)}`;
+        // Safe string conversion
+        const safeId = assetId.toString();
         
-        // Catalog API - BEST NAMES
+        // PRIORITY #1: CATALOG API
+        let name = `Item #${safeId.slice(-6)}`;
+        
         const catalogRes = await fetchWithRetry(
           `https://catalog.roblox.com/v1/catalog/items/details`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ 
-              items: [{ itemType: 'Asset', id: parseInt(assetId) }] 
+              items: [{ itemType: 'Asset', id: parseInt(safeId) }] 
             })
           },
           1
         );
         
         if (catalogRes) {
-          const catalogData = await catalogRes.json();
-          const itemData = catalogData?.data?.[0];
-          if (itemData?.Name && itemData.Name !== 'Error') {
-            name = itemData.Name;
-          }
+          try {
+            const catalogData = await catalogRes.json();
+            const itemData = catalogData?.data?.[0];
+            if (itemData?.Name && itemData.Name.length > 2) {
+              name = itemData.Name;
+            }
+          } catch (e) {}
         }
 
         // FALLBACK #2: Asset details
-        if (name === `Item #${assetId.slice(-6)}`) {
-          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
+        if (name === `Item #${safeId.slice(-6)}`) {
+          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${safeId}/details`, 1);
           if (detailRes) {
-            const detail = await detailRes.json();
-            name = detail.Name || name;
+            try {
+              const detail = await detailRes.json();
+              if (detail.Name && detail.Name.length > 2) {
+                name = detail.Name;
+              }
+            } catch (e) {}
           }
         }
 
-        // PERFECT IMAGE FALLBACKS (5 LEVELS)
+        // PERFECT IMAGES
         const imageUrls = [
-          thumbs[assetId],  // 1. Batch thumbnails
-          `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`,  // 2. Single batch
-          `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,  // 3. Direct
-          `/thumbnail/${assetId}`,  // 4. Proxy server
-          `https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓`  // 5. Success icon
+          thumbs[assetId], 
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${safeId}&size=150x150&format=Png`,
+          `https://www.roblox.com/asset-thumbnail/image?assetId=${safeId}&width=150&height=150&format=png`,
+          `/thumbnail/${safeId}`,
+          `https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓`
         ];
 
-        return {
-          id: assetId,
+        items.push({
+          id: safeId,
           name: name.substring(0, 28) + (name.length > 28 ? '...' : ''),
           image: imageUrls[0] || imageUrls[1] || imageUrls[2],
-          link: `https://www.roblox.com/catalog/${assetId}/item`
-        };
+          link: `https://www.roblox.com/catalog/${safeId}/item`
+        });
 
       } catch (e) {
-        return {
-          id: assetId,
-          name: `Equipped #${assetId.slice(-4)}`,
-          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
-          link: `https://www.roblox.com/catalog/${assetId}/item`
-        };
+        console.log(`⚠️ Skip item ${assetId}:`, e.message);
       }
-    }));
+    }
 
-    // Filter broken items
-    const validItems = items.filter(item => item.image && item.name.length > 5);
-    
-    cachedData.items = validItems;
+    cachedData.items = items;
     cachedData.lastUpdate = now;
-    console.log(`✅ ${validItems.length} PERFECT items with REAL names ready!`);
-    broadcast({ items: validItems });
-    res.json({ items: validItems });
+    console.log(`✅ ${items.length} PERFECT items ready!`);
+    broadcast({ items });
+    res.json({ items });
 
   } catch (err) {
     console.error('Items error:', err.message);
@@ -218,13 +240,12 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-// 🔥 THUMBNAIL PROXY - FIX BROKEN IMAGES
+// 🔥 THUMBNAIL PROXY
 app.get("/thumbnail/:assetId", async (req, res) => {
   try {
     const { assetId } = req.params;
     console.log(`🖼️ Thumbnail: ${assetId}`);
     
-    // Try Roblox thumbnails API
     const url = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`;
     const thumbRes = await fetchWithRetry(url);
     
@@ -237,12 +258,10 @@ app.get("/thumbnail/:assetId", async (req, res) => {
       }
     }
     
-    // Fallback 1: Direct Roblox thumbnail
     const fallback1 = `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`;
     res.redirect(302, fallback1);
     
   } catch (err) {
-    // Ultimate fallback
     res.redirect(302, 'https://via.placeholder.com/150x150/333/fff?text=ROBLOX');
   }
 });
