@@ -162,9 +162,8 @@ class PortfolioApp {
   }
 
   addInteractions() {
-    // Copy button
     document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('@dapaarowr4').then(() => {
+      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
         const btn = document.getElementById('copyBtn');
         btn.classList.add('copied');
         btn.innerHTML = '✅ Copied!';
@@ -174,6 +173,8 @@ class PortfolioApp {
         }, 2000);
       });
     };
+  }
+}
 
 let app;
 document.addEventListener('DOMContentLoaded', () => {
