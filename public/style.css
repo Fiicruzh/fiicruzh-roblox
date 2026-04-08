@@ -125,8 +125,6 @@ body{
   font-family: 'Orbitron', sans-serif;
   transition: all 0.3s ease;
   display: inline-block;
-  width: 100%;
-  box-sizing: border-box;
 }
 
 .copy-btn:hover {
@@ -203,8 +201,6 @@ body{
   text-decoration:none;
   font-size:13px;
   transition:.3s;
-  font-family: 'Orbitron', sans-serif;
-  box-sizing: border-box;
 }
 
 .btn:hover{
@@ -227,27 +223,10 @@ body{
   min-width:48px;
 }
 
-/* ✅ DISCORD BUTTON - RAPAT & KOMPAK */
-.discord-section {
-  margin-top: 8px;
-  padding-top: 12px;
-  border-top: 1px solid rgba(0,255,255,0.2);
-}
-
 .discord-btn{
+  margin-top:10px;
   width:100%;
   justify-content:center;
-  font-size: 12px;
-  padding: 10px 12px;
-  background: rgba(88,101,242,0.1);
-  border: 1px solid #5865F2;
-  color: #5865F2;
-}
-
-.discord-btn:hover {
-  background: #5865F2;
-  color: white;
-  box-shadow: 0 0 15px #5865F2;
 }
 
 @media(max-width:480px){
@@ -255,14 +234,9 @@ body{
     flex-direction:column;
     text-align:center;
   }
-  
-  .discord-btn {
-    font-size: 11px;
-    padding: 9px 11px;
-  }
 }
 
-/* 🔥 ROBLOX ITEMS - CYAN HORIZONTAL SCROLL */
+/* ROBLOX ITEMS */
 .items-section{
   margin-top:15px;
 }
@@ -276,13 +250,12 @@ body{
 
 .items-container{
   display:flex;
-  gap:8px;
+  gap:10px;
   overflow-x:auto;
-  min-height:100px;
-  padding:8px 4px;
+  min-height:110px;
+  padding:5px 0;
   scrollbar-width: thin;
-  scrollbar-color: #00ffff transparent;
-  scroll-snap-type: x mandatory;
+  scrollbar-color: cyan transparent;
 }
 
 .items-container::-webkit-scrollbar {
@@ -290,85 +263,85 @@ body{
 }
 
 .items-container::-webkit-scrollbar-track {
-  background: rgba(0,255,255,0.1);
-  border-radius: 2px;
+  background: transparent;
 }
 
 .items-container::-webkit-scrollbar-thumb {
-  background: linear-gradient(90deg, #00ffff, #0080ff);
+  background: cyan;
   border-radius: 2px;
 }
 
 .item-card{
-  min-width:85px;
-  flex: 0 0 85px;
-  background:rgba(0,255,255,0.08);
-  border:1px solid rgba(0,255,255,0.2);
+  min-width:90px;
+  background:rgba(0,255,255,0.05);
   border-radius:10px;
   padding:6px;
   text-align:center;
   cursor:pointer;
   transition:0.3s;
-  scroll-snap-align: center;
   position:relative;
 }
 
 .item-card:hover{
-  transform:scale(1.05);
-  box-shadow:0 0 15px cyan;
+  transform:scale(1.1);
 }
 
 .item-card img{
   width:100%;
-  height:65px;
+  height:70px;
   object-fit:cover;
   border-radius:6px;
 }
 
-/* ❌ HAPUS NAMA ITEM */
 .item-name{
-  display: none !important;
+  font-size:10px;
+  margin-top:4px;
+  font-weight:500;
 }
 
 .equipped{
   position:absolute;
   top:4px;
   left:4px;
-  font-size:7px;
-  background:#00ff88;
+  font-size:8px;
+  background:lime;
   color:black;
-  padding:1px 3px;
-  border-radius:3px;
+  padding:2px 4px;
+  border-radius:4px;
   font-weight:bold;
-  box-shadow:0 0 5px #00ff88;
+  box-shadow:0 0 5px lime;
 }
 
-/* ... (semua CSS sebelumnya sama, HAPUS loading-smooth animation) ... */
-
-/* GANTI loading-smooth dengan STATIC */
 .loading-smooth{
-  min-width:85px;
-  flex: 0 0 85px;
-  height:85px;
+  min-width:90px;
+  height:90px;
   border-radius:10px;
-  background: linear-gradient(90deg, #0f3460 0%, #00ffff 50%, #0f3460 100%);
+  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  animation:loading-smooth 1.5s ease-in-out infinite;
   position:relative;
   overflow:hidden;
-  border: 1px solid rgba(0,255,255,0.3);
 }
 
 .loading-smooth::after{
-  content:"LOADING...";
+  content:"";
   position:absolute;
-  top:50%;
-  left:50%;
-  transform:translate(-50%,-50%);
-  font-size:8px;
-  color:cyan;
-  font-weight:bold;
+  top:0;
+  left:-100%;
+  width:100%;
+  height:100%;
+  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  animation:shimmer 1.5s infinite;
 }
 
-/* HAPUS @keyframes loading-smooth & shimmer */
+@keyframes loading-smooth{
+  0%,100%{opacity:0.6; transform:scale(1);}
+  50%{opacity:1; transform:scale(1.02);}
+}
+
+@keyframes shimmer{
+  0%{left:-100%;}
+  100%{left:100%;}
+}
 
 #liveIndicator {
   animation: pulse 2s infinite;
@@ -379,24 +352,23 @@ body{
   50% { opacity: 0.5; }
 }
 
-/* PERFECT ITEM IMAGES - CYAN THEME */
+/* PERFECT ITEM IMAGES */
 .item-card img {
   width: 100% !important;
-  height: 65px !important;
+  height: 70px !important;
   object-fit: cover !important;
   border-radius: 6px !important;
-  background: linear-gradient(90deg, #0f3460 0%, #00ffff 50%, #0f3460 100%) !important;
+  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%) !important;
   transition: all 0.3s ease !important;
   image-rendering: -webkit-optimize-contrast;
-  border: 1px solid rgba(0,255,255,0.3);
 }
 
 .item-card img[src*="placeholder"] {
-  background: linear-gradient(90deg, #00ffff 0%, #0080ff 50%, #00ffff 100%) !important;
-  animation: shimmer-image 2s infinite !important;
+  background: linear-gradient(90deg, #0f3460 0%, #00ff88 50%, #0f3460 100%) !important;
+  animation: shimmer 2s infinite !important;
 }
 
-@keyframes shimmer-image {
+@keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
