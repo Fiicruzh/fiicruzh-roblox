@@ -240,7 +240,7 @@ body{
   }
 }
 
-/* ROBLOX ITEMS - GRID LAYOUT */
+/* 🔥 ROBLOX ITEMS - HORIZONTAL SCROLL GRID */
 .items-section{
   margin-top:15px;
 }
@@ -252,62 +252,105 @@ body{
   margin-bottom:8px;
 }
 
+/* CONTAINER SCROLL KIRI KANAN */
 .items-grid{
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  display: flex;
   gap: 8px;
-  min-height: 120px;
-  padding: 8px 0;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 8px 4px;
+  scroll-behavior: smooth;
+  min-height: 110px;
+  scrollbar-width: thin;
+  scrollbar-color: cyan transparent;
+  scroll-snap-type: x mandatory;
 }
 
+.items-grid::-webkit-scrollbar {
+  height: 4px;
+}
+
+.items-grid::-webkit-scrollbar-track {
+  background: rgba(0,0,0,0.3);
+  border-radius: 2px;
+}
+
+.items-grid::-webkit-scrollbar-thumb {
+  background: linear-gradient(90deg, cyan, #00ff88);
+  border-radius: 2px;
+  box-shadow: 0 0 4px rgba(0,255,255,0.5);
+}
+
+.items-grid::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(90deg, #00ff88, cyan);
+}
+
+/* SNAP TO CARD */
 .item-category{
-  background: rgba(0,255,255,0.05);
-  border-radius: 8px;
+  flex: 0 0 90px;
+  background: rgba(0,255,255,0.08);
+  border: 1px solid rgba(0,255,255,0.2);
+  border-radius: 10px;
   padding: 6px;
   text-align: center;
-  transition: 0.3s;
+  transition: all 0.3s ease;
   position: relative;
-  min-height: 85px;
+  height: 95px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
+  cursor: pointer;
+  backdrop-filter: blur(8px);
+  scroll-snap-align: center;
 }
 
 .item-category:hover{
-  transform: scale(1.05);
-  box-shadow: 0 0 15px rgba(0,255,255,0.3);
+  transform: scale(1.08);
+  background: rgba(0,255,255,0.2);
+  box-shadow: 0 0 20px rgba(0,255,255,0.5);
+  border-color: cyan;
+  z-index: 10;
 }
 
 .item-category img{
   width: 100%;
-  height: 60px;
+  height: 65px;
   object-fit: cover;
   border-radius: 6px;
   background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+  image-rendering: -webkit-optimize-contrast;
+}
+
+.item-category.empty{
+  border-color: rgba(100,100,100,0.3);
+  background: rgba(20,20,20,0.6);
 }
 
 .item-category.empty img{
-  background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  color: #666;
-  height: 60px;
+  display: none;
+}
+
+.item-category.empty::before{
+  content: "−";
+  font-size: 28px;
+  color: #888;
+  font-weight: 200;
+  line-height: 65px;
 }
 
 .item-category.equipped{
-  border: 2px solid lime;
-  box-shadow: 0 0 10px lime;
+  border: 2px solid #00ff88;
+  background: rgba(0,255,136,0.15);
+  box-shadow: 0 0 15px rgba(0,255,136,0.6);
 }
 
 .item-category.equipped::after{
   content: "✓";
   position: absolute;
-  top: 4px;
-  right: 4px;
-  background: lime;
+  top: 3px;
+  right: 3px;
+  background: #00ff88;
   color: black;
   width: 18px;
   height: 18px;
@@ -315,14 +358,15 @@ body{
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: bold;
+  box-shadow: 0 0 6px rgba(0,255,136,0.8);
 }
 
 .loading-smooth{
-  grid-column: 1 / -1;
-  min-height: 85px;
-  border-radius: 8px;
+  flex: 0 0 90px;
+  height: 95px;
+  border-radius: 10px;
   background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
   animation: loading-smooth 1.5s ease-in-out infinite;
   position: relative;
@@ -336,7 +380,7 @@ body{
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
   animation: shimmer 1.5s infinite;
 }
 
