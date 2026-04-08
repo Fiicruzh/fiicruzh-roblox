@@ -169,12 +169,13 @@ class PortfolioApp {
       btn.classList.add('copied');
       btn.innerHTML = '✅ Copied!';
       
-      setTimeout(() => {
-        btn.classList.remove('copied');
-        btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-      }, 2000);
-    });
-  };
+        setTimeout(() => {
+          btn.classList.remove('copied');
+          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+        }, 2000);
+      });
+    };
+  }
 }
 
 let app;
