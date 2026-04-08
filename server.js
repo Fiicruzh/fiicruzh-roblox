@@ -25,7 +25,10 @@ let cachedData = {
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 30000; // 30s cache - FASTER UPDATE
+const CACHE_DURATION = 30000;
+
+// ✅ PAKAIAN + AKSESORIS ONLY (NO AVATAR/HEAD/BODY)
+const VALID_ASSET_TYPES = [8, 11, 12]; // 8=Clothing, 11=Accessory, 12=Hat
 
 async function fetchWithRetry(url, retries = 2, delay = 1000) {
   for (let i = 0; i < retries; i++) {
@@ -93,7 +96,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API - HANYA PAKAIAN + AKSESORIS (AssetTypeId 8,11,12)
+// 🔥 ITEMS - STRICT PAKAIAN + AKSESORIS (NO AVATAR)
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -101,7 +104,7 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🎯 Loading PAKAIAN + AKSESORIS only...');
+    console.log('🎯 Loading STRICT PAKAIAN + AKSESORIS (NO AVATAR)...');
 
     // Get equipped items
     let wearData = { assetIds: [] };
@@ -110,19 +113,23 @@ app.get("/api/items", async (req, res) => {
 
     let equippedIds = wearData.assetIds?.filter(id => id) || [];
     
-    // Backup outfit
+    // Backup outfit - STRICT filter
     if (equippedIds.length < 8) {
       const outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
       if (outfitRes) {
         const outfit = await outfitRes.json();
         if (outfit.assets) {
-          outfit.assets.forEach(asset => asset?.id && equippedIds.push(asset.id));
+          outfit.assets.forEach(asset => {
+            if (asset?.id && VALID_ASSET_TYPES.includes(asset.assetType)) {
+              equippedIds.push(asset.id);
+            }
+          });
         }
       }
     }
 
-    equippedIds = [...new Set(equippedIds)].slice(0, 16);
-    console.log(`🎒 ${equippedIds.length} IDs found`);
+    equippedIds = [...new Set(equippedIds)].slice(0, 20);
+    console.log(`📦 Raw IDs: ${equippedIds.length}`);
 
     if (!equippedIds.length) return res.json({ items: [] });
 
@@ -138,22 +145,20 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // 🔥 FILTER HANYA PAKAIAN + AKSESORIS (AssetTypeId: 8=Clothing, 11=Accessory, 12=Hat)
+    // 🔥 STRICT FILTER - HANYA PAKAIAN + AKSESORIS
     const validItems = [];
     for (const assetId of equippedIds) {
       try {
-        // Check asset type
         const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
-        let assetTypeId = 0;
-        let name = `Item #${assetId}`;
+        if (!detailRes) continue;
+
+        const detail = await detailRes.json();
+        const assetTypeId = detail.AssetTypeId || 0;
         
-        if (detailRes) {
-          const detail = await detailRes.json();
-          assetTypeId = detail.AssetTypeId || 0;
-          name = detail.Name || name;
-          
-          // 🎯 HANYA PAKAIAN + AKSESORIS
-          if (![8, 11, 12].includes(assetTypeId)) continue;
+        // ❌ BLOCK AVATAR + BODY PARTS
+        if (!VALID_ASSET_TYPES.includes(assetTypeId)) {
+          console.log(`❌ BLOCKED ${assetId} (Type: ${assetTypeId})`);
+          continue;
         }
 
         const imageUrls = [
@@ -166,22 +171,22 @@ app.get("/api/items", async (req, res) => {
 
         validItems.push({
           id: assetId,
-          name: name.substring(0, 20),
+          name: detail.Name?.substring(0, 20) || `Item #${assetId}`,
           image: imageUrls[0] || imageUrls[1],
           link: `https://www.roblox.com/catalog/${assetId}/item`
         });
 
       } catch (e) {
-        console.log(`❌ Skip ${assetId}`);
+        console.log(`⚠️ Skip ${assetId}`);
       }
     }
 
-    // Limit 12 items max
+    // Max 12 items
     const items = validItems.slice(0, 12);
     
     cachedData.items = items;
     cachedData.lastUpdate = now;
-    console.log(`✅ ${items.length} PAKAIAN/AKSESORIS ready`);
+    console.log(`✅ ${items.length} PAKAIAN/AKSESORIS (NO AVATAR) ready`);
     broadcast({ items });
     res.json({ items });
 
@@ -214,7 +219,7 @@ app.get("/thumbnail/:assetId", async (req, res) => {
   }
 });
 
-// WEBSOCKET BROADCAST
+// WEBSOCKET
 function broadcast(data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -229,13 +234,13 @@ wss.on('connection', (ws) => {
   ws.on('close', () => console.log('👋 Client disconnected'));
 });
 
-// SPA ROUTING
+// SPA
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-  console.log('✅ PAKAIAN + AKSESORIS filter ACTIVE');
-  console.log('✅ WebSocket + Instant updates READY');
+  console.log(`🚀 Server: ${PORT}`);
+  console.log('✅ STRICT PAKAIAN + AKSESORIS (NO AVATAR)');
+  console.log('✅ WebSocket instant updates');
 });
