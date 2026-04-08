@@ -129,15 +129,17 @@ class PortfolioApp {
   }
 
   container.innerHTML = items.map((item, i) => {
+    // Clean name display
+    const displayName = item.name || `Item #${item.id.slice(-4)}`;
+    
     return `
-      <div class="item-card" onclick="window.open('${item.link}', '_blank')">
+      <div class="item-card" onclick="window.open('${item.link}', '_blank')" title="${displayName}">
         ${i < 4 ? '<div class="equipped">ON</div>' : ''}
         <img src="${item.image}" 
-             onerror="this.onerror=null;this.src='https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓';"
+             onerror="this.onerror=null;this.src='https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓';this.style.background='linear-gradient(90deg,#00ff88,#00aa44,#00ff88)';"
              loading="lazy"
-             alt="${item.name}"
-             style="background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);">
-        <div class="item-name">${item.name}</div>
+             alt="${displayName}">
+        <div class="item-name" style="font-size:9px;line-height:1.1;">${displayName}</div>
       </div>
     `;
   }).join('');
