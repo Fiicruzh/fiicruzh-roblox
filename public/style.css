@@ -125,6 +125,8 @@ body{
   font-family: 'Orbitron', sans-serif;
   transition: all 0.3s ease;
   display: inline-block;
+  width: 100%;
+  box-sizing: border-box;
 }
 
 .copy-btn:hover {
@@ -200,7 +202,9 @@ body{
   color:cyan;
   text-decoration:none;
   font-size:13px;
+  font-family: 'Orbitron', sans-serif;
   transition:.3s;
+  box-sizing: border-box;
 }
 
 .btn:hover{
@@ -236,7 +240,7 @@ body{
   }
 }
 
-/* ROBLOX ITEMS */
+/* ROBLOX ITEMS - GRID LAYOUT */
 .items-section{
   margin-top:15px;
 }
@@ -248,89 +252,92 @@ body{
   margin-bottom:8px;
 }
 
-.items-container{
-  display:flex;
-  gap:10px;
-  overflow-x:auto;
-  min-height:110px;
-  padding:5px 0;
-  scrollbar-width: thin;
-  scrollbar-color: cyan transparent;
+.items-grid{
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  min-height: 120px;
+  padding: 8px 0;
 }
 
-.items-container::-webkit-scrollbar {
-  height: 4px;
+.item-category{
+  background: rgba(0,255,255,0.05);
+  border-radius: 8px;
+  padding: 6px;
+  text-align: center;
+  transition: 0.3s;
+  position: relative;
+  min-height: 85px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
 }
 
-.items-container::-webkit-scrollbar-track {
-  background: transparent;
+.item-category:hover{
+  transform: scale(1.05);
+  box-shadow: 0 0 15px rgba(0,255,255,0.3);
 }
 
-.items-container::-webkit-scrollbar-thumb {
-  background: cyan;
-  border-radius: 2px;
+.item-category img{
+  width: 100%;
+  height: 60px;
+  object-fit: cover;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
 }
 
-.item-card{
-  min-width:90px;
-  background:rgba(0,255,255,0.05);
-  border-radius:10px;
-  padding:6px;
-  text-align:center;
-  cursor:pointer;
-  transition:0.3s;
-  position:relative;
+.item-category.empty img{
+  background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 24px;
+  color: #666;
+  height: 60px;
 }
 
-.item-card:hover{
-  transform:scale(1.1);
+.item-category.equipped{
+  border: 2px solid lime;
+  box-shadow: 0 0 10px lime;
 }
 
-.item-card img{
-  width:100%;
-  height:70px;
-  object-fit:cover;
-  border-radius:6px;
-}
-
-.item-name{
-  font-size:10px;
-  margin-top:4px;
-  font-weight:500;
-}
-
-.equipped{
-  position:absolute;
-  top:4px;
-  left:4px;
-  font-size:8px;
-  background:lime;
-  color:black;
-  padding:2px 4px;
-  border-radius:4px;
-  font-weight:bold;
-  box-shadow:0 0 5px lime;
+.item-category.equipped::after{
+  content: "✓";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: lime;
+  color: black;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: bold;
 }
 
 .loading-smooth{
-  min-width:90px;
-  height:90px;
-  border-radius:10px;
-  background:linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
-  animation:loading-smooth 1.5s ease-in-out infinite;
-  position:relative;
-  overflow:hidden;
+  grid-column: 1 / -1;
+  min-height: 85px;
+  border-radius: 8px;
+  background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
+  animation: loading-smooth 1.5s ease-in-out infinite;
+  position: relative;
+  overflow: hidden;
 }
 
 .loading-smooth::after{
-  content:"";
-  position:absolute;
-  top:0;
-  left:-100%;
-  width:100%;
-  height:100%;
-  background:linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
-  animation:shimmer 1.5s infinite;
+  content: "";
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.1), transparent);
+  animation: shimmer 1.5s infinite;
 }
 
 @keyframes loading-smooth{
@@ -350,25 +357,4 @@ body{
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
-}
-
-/* PERFECT ITEM IMAGES */
-.item-card img {
-  width: 100% !important;
-  height: 70px !important;
-  object-fit: cover !important;
-  border-radius: 6px !important;
-  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%) !important;
-  transition: all 0.3s ease !important;
-  image-rendering: -webkit-optimize-contrast;
-}
-
-.item-card img[src*="placeholder"] {
-  background: linear-gradient(90deg, #0f3460 0%, #00ff88 50%, #0f3460 100%) !important;
-  animation: shimmer 2s infinite !important;
-}
-
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
-  100% { background-position: 200% 0; }
 }
