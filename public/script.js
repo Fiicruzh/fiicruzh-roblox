@@ -162,18 +162,19 @@ class PortfolioApp {
   }
 
   addInteractions() {
-    document.getElementById('copyBtn').onclick = () => {
-      navigator.clipboard.writeText('NSSxFiiCruzh | @dapaarowr4').then(() => {
-        const btn = document.getElementById('copyBtn');
-        btn.classList.add('copied');
-        btn.innerHTML = '✅ Copied!';
-        setTimeout(() => {
-          btn.classList.remove('copied');
-          btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
-        }, 2000);
-      });
-    };
-  }
+  // Copy button
+  document.getElementById('copyBtn').onclick = () => {
+    navigator.clipboard.writeText('@dapaarowr4').then(() => {
+      const btn = document.getElementById('copyBtn');
+      btn.classList.add('copied');
+      btn.innerHTML = '✅ Copied!';
+      
+      setTimeout(() => {
+        btn.classList.remove('copied');
+        btn.innerHTML = '<i class="fa-solid fa-user"></i> NSSxFiiCruzh | @dapaarowr4';
+      }, 2000);
+    });
+  };
 }
 
 let app;
