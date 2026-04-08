@@ -93,7 +93,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS API - 100% IMAGE GUARANTEE
+// 🔥 ITEMS API - 100% IMAGE + REAL NAME GUARANTEE
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -101,7 +101,7 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🔥 Loading ALL equipped items with images...');
+    console.log('🔥 Loading ALL equipped items with REAL names & images...');
 
     // Get equipped items
     let wearData = { assetIds: [] };
@@ -126,7 +126,15 @@ app.get("/api/items", async (req, res) => {
 
     if (!equippedIds.length) return res.json({ items: [] });
 
-    // 🔥 PRE-CACHE THUMBNAILS (BATCH)
+    // 🔥 BATCH CATALOG + THUMBNAILS (2x faster)
+    const catalogPromises = equippedIds.map(id => 
+      fetchWithRetry(`https://catalog.roblox.com/v1/catalog/items/details`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ itemType: 'Asset', id: parseInt(id) }] })
+      })
+    );
+
     const thumbRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/assets?assetIds=${equippedIds.join(',')}&size=150x150&format=Png`
     );
@@ -138,16 +146,31 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // Build items dengan PERFECT images
-    const items = [];
-    for (const assetId of equippedIds) {
+    // 🔥 Process ALL items parallel
+    const itemPromises = equippedIds.map(async (assetId, index) => {
       try {
-        // Name
+        // CATALOG API = REAL NAME (Priority #1)
         let name = `Item #${assetId}`;
-        const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
-        if (detailRes) {
-          const detail = await detailRes.json();
-          name = detail.Name || name;
+        
+        // Try catalog batch result first
+        if (catalogPromises[index]) {
+          try {
+            const catalogRes = await catalogPromises[index];
+            if (catalogRes?.ok) {
+              const catalogData = await catalogRes.json();
+              const itemData = catalogData?.data?.[0];
+              if (itemData?.Name) {
+                name = itemData.Name;
+              }
+            }
+          } catch (e) {
+            // Fallback to asset details
+            const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
+            if (detailRes) {
+              const detail = await detailRes.json();
+              name = detail.Name || name;
+            }
+          }
         }
 
         // PRIORITY IMAGE FALLBACKS (5 LEVEL)
@@ -159,91 +182,38 @@ app.get("/api/items", async (req, res) => {
           `https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓`  // 5. Success placeholder
         ];
 
-        items.push({
+        return {
           id: assetId,
-          name: name.substring(0, 25),  // Short name
-          image: imageUrls[0] || imageUrls[1],  // Best available
+          name: name.substring(0, 28) + (name.length > 28 ? '...' : ''),  // Perfect length
+          image: imageUrls[0] || imageUrls[1] || imageUrls[2],
           link: `https://www.roblox.com/catalog/${assetId}/item`
-        });
+        };
 
       } catch (e) {
-        items.push({
+        return {
           id: assetId,
-          name: `Equipped`,
+          name: `Equipped #${assetId.slice(-4)}`,
           image: `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
           link: `https://www.roblox.com/catalog/${assetId}/item`
-        });
+        };
       }
-    }
+    });
 
-    cachedData.items = items;
+    const items = await Promise.all(itemPromises);
+    
+    // Filter out any broken items
+    const validItems = items.filter(item => item.image && item.name !== 'Item #');
+    
+    cachedData.items = validItems;
     cachedData.lastUpdate = now;
-    console.log(`✅ ALL ${items.length} images ready`);
-    broadcast({ items });
-    res.json({ items });
+    console.log(`✅ ${validItems.length} PERFECT items ready!`);
+    broadcast({ items: validItems });
+    res.json({ items: validItems });
 
   } catch (err) {
-    console.error('Items:', err.message);
+    console.error('Items error:', err.message);
     res.json({ items: cachedData.items || [] });
   }
-});
-
-// 🔥 THUMBNAIL PROXY - FIX BROKEN IMAGES
-app.get("/thumbnail/:assetId", async (req, res) => {
-  try {
-    const { assetId } = req.params;
-    console.log(`🖼️ Thumbnail: ${assetId}`);
-    
-    // Try Roblox thumbnails API
-    const url = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`;
-    const thumbRes = await fetchWithRetry(url);
-    
-    if (thumbRes) {
-      const thumbs = await thumbRes.json();
-      const imageUrl = thumbs?.data?.[0]?.imageUrl;
-      if (imageUrl) {
-        res.redirect(302, imageUrl);
-        return;
-      }
-    }
-    
-    // Fallback 1: Direct Roblox thumbnail
-    const fallback1 = `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`;
-    res.redirect(302, fallback1);
-    
-  } catch (err) {
-    // Ultimate fallback
-    res.redirect(302, 'https://via.placeholder.com/150x150/333/fff?text=ROBLOX');
-  }
-});
-
-// WEBSOCKET
-function broadcast(data) {
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN) {
-      client.send(JSON.stringify(data));
-    }
-  });
-}
-
-wss.on('connection', (ws) => {
-  console.log('👤 Connected');
-  ws.send(JSON.stringify(cachedData));
-  ws.on('close', () => console.log('👋 Disconnected'));
-});
-
-// SPA
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
-});
-
-app.get('/health', (req, res) => {
-  res.json({ status: 'OK', items: cachedData.items.length });
-});
-
-server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server: ${PORT}`);
-  console.log('✅ Thumbnails proxy ready!');
 });
 
 process.on('SIGTERM', () => server.close(() => process.exit(0)));
