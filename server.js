@@ -22,25 +22,31 @@ const USER_ID = 8941948601;
 let cachedData = {
   stats: { friends: 0, followers: 0, following: 0 },
   items: {},
+  lastItemHash: null,  // 🔥 HASH UNTUK DETECT PERUBAHAN
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 30000; // 30 detik untuk update cepat
+const CACHE_DURATION = 10000; // 10 detik - CEPAT DETECT
 
-async function fetchWithRetry(url, retries = 2, delay = 1000) {
+async function fetchWithRetry(url, retries = 3, delay = 800) {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 8000);
+      const timeoutId = setTimeout(() => controller.abort(), 6000);
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (response?.ok) return response;
     } catch (err) {
       if (i === retries - 1) return null;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise(r => setTimeout(r, delay * (i + 1)));
     }
   }
   return null;
+}
+
+// 🔥 HASH GENERATOR UNTUK DETECT PERUBAHAN
+function generateHash(items) {
+  return JSON.stringify(items).slice(0, 50);
 }
 
 // STATS
@@ -93,27 +99,38 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 CATEGORIZED ITEMS API
+// 🔥 AUTO DETECT ITEM CHANGES + FORCE REFRESH
 app.get("/api/items", async (req, res) => {
   try {
-    const now = Date.now();
-    if (now - cachedData.lastUpdate < CACHE_DURATION && Object.keys(cachedData.items).length > 0) {
+    console.log('🔥 Checking items...');
+    
+    // SELALU FETCH FRESH DATA UNTUK DETECT PERUBAHAN
+    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
+    if (!wearRes) {
+      return res.json({ items: cachedData.items });
+    }
+    
+    const wearData = await wearRes.json();
+    const currentHash = generateHash(wearData.assetIds || []);
+    
+    console.log(`📦 Current hash: ${currentHash.slice(0,12)} | Cached: ${cachedData.lastItemHash?.slice(0,12)}`);
+    
+    // 🔥 JIKA HASH BERUBAH = FORCE REFRESH
+    const hasChanged = currentHash !== cachedData.lastItemHash;
+    
+    if (!hasChanged && Date.now() - cachedData.lastUpdate < CACHE_DURATION) {
+      console.log('✅ Using cache - no changes');
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🔥 Loading categorized equipped items...');
+    console.log(hasChanged ? '🔄 ITEMS CHANGED - REFRESHING!' : '🔄 Cache expired - refreshing...');
 
     // Get equipped items dengan type mapping
-    let wearData = { assetIds: [] };
-    const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    if (wearRes) wearData = await wearRes.json();
-
     let equippedItems = [];
     if (wearData.assetIds && wearData.assetIds.length > 0) {
-      // Get details untuk semua equipped items
-      const detailsPromises = wearData.assetIds.map(async (assetId) => {
+      const detailsPromises = wearData.assetIds.slice(0, 20).map(async (assetId) => {
         try {
-          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`);
+          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
           if (detailRes) {
             const detail = await detailRes.json();
             return {
@@ -135,18 +152,18 @@ app.get("/api/items", async (req, res) => {
       11: 'atasan',      // Shirt
       12: 'atasan',      // T-Shirt  
       2: 'bawahan',      // Pants
-      8: 'sepatu',       // Shoes
-      46: 'kemeja klasik', // Classic Shirt
-      47: 'kaus klasik',  // Classic T-Shirt
+      8: 'sepatu',       // Shoes (fix)
+      46: 'kemeja klasik', 
+      47: 'kaus klasik', 
       
       // AKSESORIS
-      8: 'kepala',       // Hat
-      41: 'wajah',       // Face Accessory
-      42: 'leher',       // Neck Accessory
-      43: 'belakang',    // Back Accessory
-      44: 'pinggang',    // Waist Accessory
-      45: 'bahu',        // Shoulder Accessory
-      49: 'depan',       // Front Accessory
+      1: 'kepala',       // Hat
+      41: 'wajah',       // Face
+      42: 'leher',       // Neck
+      43: 'belakang',    // Back
+      44: 'pinggang',    // Waist
+      45: 'bahu',        // Shoulder
+      49: 'depan',       // Front
       50: 'perlengkapan' // Gear
     };
 
@@ -156,7 +173,7 @@ app.get("/api/items", async (req, res) => {
       aksesoris: {}
     };
 
-    // Get thumbnails untuk semua items
+    // Batch thumbnails
     const assetIds = equippedItems.map(item => item.id);
     let thumbs = {};
     if (assetIds.length > 0) {
@@ -174,9 +191,8 @@ app.get("/api/items", async (req, res) => {
     equippedItems.forEach(item => {
       const category = categoryMap[item.type];
       if (category) {
-        const section = category.includes('atasan') || category.includes('bawahan') || 
-                       category.includes('sepatu') || category.includes('kemeja') || category.includes('kaus') 
-                       ? 'pakaian' : 'aksesoris';
+        const section = ['atasan', 'bawahan', 'sepatu', 'kemeja klasik', 'kaus klasik'].includes(category) 
+          ? 'pakaian' : 'aksesoris';
         
         if (!categorized[section][category]) {
           categorized[section][category] = {
@@ -188,9 +204,12 @@ app.get("/api/items", async (req, res) => {
       }
     });
 
+    // 🔥 UPDATE CACHE + HASH
     cachedData.items = categorized;
-    cachedData.lastUpdate = now;
-    console.log(`✅ Categorized: Pakaian=${Object.keys(categorized.pakaian).length}, Aksesoris=${Object.keys(categorized.aksesoris).length}`);
+    cachedData.lastItemHash = currentHash;
+    cachedData.lastUpdate = Date.now();
+    
+    console.log(`✅ REFRESHED! Pakaian: ${Object.keys(categorized.pakaian).length} | Aksesoris: ${Object.keys(categorized.aksesoris).length}`);
     broadcast({ items: categorized });
     res.json({ items: categorized });
 
@@ -200,7 +219,7 @@ app.get("/api/items", async (req, res) => {
   }
 });
 
-// WEBSOCKET
+// WEBSOCKET BROADCAST
 function broadcast(data) {
   wss.clients.forEach(client => {
     if (client.readyState === WebSocket.OPEN) {
@@ -221,12 +240,16 @@ app.get("*", (req, res) => {
 });
 
 app.get('/health', (req, res) => {
-  res.json({ status: 'OK', items: Object.keys(cachedData.items).length });
+  res.json({ 
+    status: 'OK', 
+    items: Object.keys(cachedData.items || {}).length,
+    lastHash: cachedData.lastItemHash?.slice(0,12),
+    changed: cachedData.lastItemHash ? '✅' : '⏳'
+  });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server: ${PORT}`);
-  console.log('✅ Categorized items ready!');
+  console.log(`🚀 Server: http://localhost:${PORT}`);
+  console.log('✅ AUTO ITEM DETECTION READY!');
+  console.log('🔥 Changes detected = INSTANT REFRESH');
 });
-
-process.on('SIGTERM', () => server.close(() => process.exit(0)));
