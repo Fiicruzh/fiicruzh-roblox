@@ -252,18 +252,19 @@ body{
   margin-bottom:8px;
 }
 
-/* CONTAINER SCROLL KIRI KANAN */
+/* GANTI BAGIAN .items-grid DAN .item-category SAJA */
+
 .items-grid{
   display: flex;
-  gap: 8px;
+  gap: 10px;
   overflow-x: auto;
   overflow-y: hidden;
-  padding: 8px 4px;
+  padding: 12px 8px;
   scroll-behavior: smooth;
   min-height: 110px;
   scrollbar-width: thin;
   scrollbar-color: cyan transparent;
-  scroll-snap-type: x mandatory;
+  scroll-snap-type: x proximity;
 }
 
 .items-grid::-webkit-scrollbar {
@@ -271,7 +272,7 @@ body{
 }
 
 .items-grid::-webkit-scrollbar-track {
-  background: rgba(0,0,0,0.3);
+  background: rgba(0,0,0,0.4);
   border-radius: 2px;
 }
 
@@ -285,92 +286,82 @@ body{
   background: linear-gradient(90deg, #00ff88, cyan);
 }
 
-/* SNAP TO CARD */
+/* HANYA EQUIPPED ITEMS - TIDAK ADA SLOT KOSONG */
 .item-category{
-  flex: 0 0 90px;
-  background: rgba(0,255,255,0.08);
-  border: 1px solid rgba(0,255,255,0.2);
-  border-radius: 10px;
-  padding: 6px;
+  flex: 0 0 88px;
+  background: rgba(0,255,255,0.12);
+  border: 2px solid rgba(0,255,255,0.3);
+  border-radius: 12px;
+  padding: 8px 4px;
   text-align: center;
-  transition: all 0.3s ease;
+  transition: all 0.4s cubic-bezier(0.25, 0.46, 0.45, 0.94);
   position: relative;
-  height: 95px;
+  height: 100px;
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   cursor: pointer;
-  backdrop-filter: blur(8px);
-  scroll-snap-align: center;
+  backdrop-filter: blur(12px);
+  scroll-snap-align: start;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
 }
 
 .item-category:hover{
-  transform: scale(1.08);
-  background: rgba(0,255,255,0.2);
-  box-shadow: 0 0 20px rgba(0,255,255,0.5);
+  transform: translateY(-4px) scale(1.05);
+  background: rgba(0,255,255,0.25);
   border-color: cyan;
-  z-index: 10;
+  box-shadow: 0 8px 25px rgba(0,255,255,0.4);
+  z-index: 20;
 }
 
 .item-category img{
   width: 100%;
-  height: 65px;
+  max-width: 72px;
+  height: 68px;
   object-fit: cover;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #1a1a2e 0%, #16213e 50%, #1a1a2e 100%);
+  border-radius: 8px;
+  background: linear-gradient(145deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
   image-rendering: -webkit-optimize-contrast;
-}
-
-.item-category.empty{
-  border-color: rgba(100,100,100,0.3);
-  background: rgba(20,20,20,0.6);
-}
-
-.item-category.empty img{
-  display: none;
-}
-
-.item-category.empty::before{
-  content: "−";
-  font-size: 28px;
-  color: #888;
-  font-weight: 200;
-  line-height: 65px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
 }
 
 .item-category.equipped{
   border: 2px solid #00ff88;
-  background: rgba(0,255,136,0.15);
-  box-shadow: 0 0 15px rgba(0,255,136,0.6);
+  background: linear-gradient(145deg, rgba(0,255,136,0.2), rgba(0,255,255,0.1));
+  box-shadow: 0 0 20px rgba(0,255,136,0.5), 0 4px 15px rgba(0,0,0,0.4);
 }
 
 .item-category.equipped::after{
   content: "✓";
   position: absolute;
-  top: 3px;
-  right: 3px;
-  background: #00ff88;
+  top: 4px;
+  right: 4px;
+  background: linear-gradient(145deg, #00ff88, #00cc66);
   color: black;
-  width: 18px;
-  height: 18px;
+  width: 20px;
+  height: 20px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: bold;
-  box-shadow: 0 0 6px rgba(0,255,136,0.8);
+  box-shadow: 0 2px 6px rgba(0,255,136,0.6);
+  border: 1px solid rgba(255,255,255,0.3);
 }
 
+/* TIDAK ADA .item-category.empty - SLOT KOSONG DIHILANGKAN */
+
 .loading-smooth{
-  flex: 0 0 90px;
-  height: 95px;
-  border-radius: 10px;
+  flex: 0 0 88px;
+  height: 100px;
+  border-radius: 12px;
   background: linear-gradient(90deg, #111 0%, #222 50%, #111 100%);
   animation: loading-smooth 1.5s ease-in-out infinite;
   position: relative;
   overflow: hidden;
+  border: 2px solid rgba(0,255,255,0.3);
 }
 
 .loading-smooth::after{
@@ -380,7 +371,7 @@ body{
   left: -100%;
   width: 100%;
   height: 100%;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+  background: linear-gradient(90deg, transparent, rgba(0,255,255,0.15), transparent);
   animation: shimmer 1.5s infinite;
 }
 
