@@ -292,12 +292,7 @@ body{
   border-radius:6px;
 }
 
-.item-name{
-  font-size:10px;
-  margin-top:4px;
-  font-weight:500;
-}
-
+item-name
 .equipped{
   position:absolute;
   top:4px;
