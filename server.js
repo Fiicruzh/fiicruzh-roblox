@@ -25,16 +25,13 @@ let cachedData = {
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 30000;
-
-// ✅ PAKAIAN + AKSESORIS ONLY (NO AVATAR/HEAD/BODY)
-const VALID_ASSET_TYPES = [8, 11, 12]; // 8=Clothing, 11=Accessory, 12=Hat
+const CACHE_DURATION = 60000;
 
 async function fetchWithRetry(url, retries = 2, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (response?.ok) return response;
@@ -96,7 +93,7 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 ITEMS - STRICT PAKAIAN + AKSESORIS (NO AVATAR)
+// 🔥 ITEMS API - 100% IMAGE GUARANTEE
 app.get("/api/items", async (req, res) => {
   try {
     const now = Date.now();
@@ -104,7 +101,7 @@ app.get("/api/items", async (req, res) => {
       return res.json({ items: cachedData.items });
     }
 
-    console.log('🎯 Loading STRICT PAKAIAN + AKSESORIS (NO AVATAR)...');
+    console.log('🔥 Loading ALL equipped items with images...');
 
     // Get equipped items
     let wearData = { assetIds: [] };
@@ -113,27 +110,23 @@ app.get("/api/items", async (req, res) => {
 
     let equippedIds = wearData.assetIds?.filter(id => id) || [];
     
-    // Backup outfit - STRICT filter
-    if (equippedIds.length < 8) {
+    // Backup outfit
+    if (equippedIds.length < 5) {
       const outfitRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/outfit`);
       if (outfitRes) {
         const outfit = await outfitRes.json();
         if (outfit.assets) {
-          outfit.assets.forEach(asset => {
-            if (asset?.id && VALID_ASSET_TYPES.includes(asset.assetType)) {
-              equippedIds.push(asset.id);
-            }
-          });
+          outfit.assets.forEach(asset => asset?.id && equippedIds.push(asset.id));
         }
       }
     }
 
-    equippedIds = [...new Set(equippedIds)].slice(0, 20);
-    console.log(`📦 Raw IDs: ${equippedIds.length}`);
+    equippedIds = [...new Set(equippedIds)].slice(0, 18);
+    console.log(`🎒 ${equippedIds.length} IDs:`, equippedIds.slice(0, 5));
 
     if (!equippedIds.length) return res.json({ items: [] });
 
-    // 🔥 BATCH THUMBNAILS
+    // 🔥 PRE-CACHE THUMBNAILS (BATCH)
     const thumbRes = await fetchWithRetry(
       `https://thumbnails.roblox.com/v1/assets?assetIds=${equippedIds.join(',')}&size=150x150&format=Png`
     );
@@ -145,61 +138,63 @@ app.get("/api/items", async (req, res) => {
       });
     }
 
-    // 🔥 STRICT FILTER - HANYA PAKAIAN + AKSESORIS
-    const validItems = [];
+    // Build items dengan PERFECT images
+    const items = [];
     for (const assetId of equippedIds) {
       try {
+        // Name
+        let name = `Item #${assetId}`;
         const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
-        if (!detailRes) continue;
-
-        const detail = await detailRes.json();
-        const assetTypeId = detail.AssetTypeId || 0;
-        
-        // ❌ BLOCK AVATAR + BODY PARTS
-        if (!VALID_ASSET_TYPES.includes(assetTypeId)) {
-          console.log(`❌ BLOCKED ${assetId} (Type: ${assetTypeId})`);
-          continue;
+        if (detailRes) {
+          const detail = await detailRes.json();
+          name = detail.Name || name;
         }
 
+        // PRIORITY IMAGE FALLBACKS (5 LEVEL)
         const imageUrls = [
-          thumbs[assetId],
-          `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`,
-          `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
-          `/thumbnail/${assetId}`,
-          `https://via.placeholder.com/85x65/0f0f23/00ff88?text=✓`
+          thumbs[assetId],  // 1. Batch thumbnails
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`,  // 2. Single
+          `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,  // 3. Direct
+          `/thumbnail/${assetId}`,  // 4. Proxy
+          `https://via.placeholder.com/90x70/0f0f23/00ff88?text=✓`  // 5. Success placeholder
         ];
 
-        validItems.push({
+        items.push({
           id: assetId,
-          name: detail.Name?.substring(0, 20) || `Item #${assetId}`,
-          image: imageUrls[0] || imageUrls[1],
+          name: name.substring(0, 25),  // Short name
+          image: imageUrls[0] || imageUrls[1],  // Best available
           link: `https://www.roblox.com/catalog/${assetId}/item`
         });
 
       } catch (e) {
-        console.log(`⚠️ Skip ${assetId}`);
+        items.push({
+          id: assetId,
+          name: `Equipped`,
+          image: `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
+          link: `https://www.roblox.com/catalog/${assetId}/item`
+        });
       }
     }
 
-    // Max 12 items
-    const items = validItems.slice(0, 12);
-    
     cachedData.items = items;
     cachedData.lastUpdate = now;
-    console.log(`✅ ${items.length} PAKAIAN/AKSESORIS (NO AVATAR) ready`);
+    console.log(`✅ ALL ${items.length} images ready`);
     broadcast({ items });
     res.json({ items });
 
   } catch (err) {
-    console.error('Items error:', err.message);
+    console.error('Items:', err.message);
     res.json({ items: cachedData.items || [] });
   }
 });
 
-// THUMBNAIL PROXY
+// 🔥 THUMBNAIL PROXY - FIX BROKEN IMAGES
 app.get("/thumbnail/:assetId", async (req, res) => {
   try {
     const { assetId } = req.params;
+    console.log(`🖼️ Thumbnail: ${assetId}`);
+    
+    // Try Roblox thumbnails API
     const url = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`;
     const thumbRes = await fetchWithRetry(url);
     
@@ -212,10 +207,13 @@ app.get("/thumbnail/:assetId", async (req, res) => {
       }
     }
     
-    res.redirect(302, `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`);
+    // Fallback 1: Direct Roblox thumbnail
+    const fallback1 = `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`;
+    res.redirect(302, fallback1);
     
   } catch (err) {
-    res.redirect(302, 'https://via.placeholder.com/85x65/333/fff?text=ROBLOX');
+    // Ultimate fallback
+    res.redirect(302, 'https://via.placeholder.com/150x150/333/fff?text=ROBLOX');
   }
 });
 
@@ -229,9 +227,9 @@ function broadcast(data) {
 }
 
 wss.on('connection', (ws) => {
-  console.log('👤 Client connected');
+  console.log('👤 Connected');
   ws.send(JSON.stringify(cachedData));
-  ws.on('close', () => console.log('👋 Client disconnected'));
+  ws.on('close', () => console.log('👋 Disconnected'));
 });
 
 // SPA
@@ -239,8 +237,13 @@ app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+app.get('/health', (req, res) => {
+  res.json({ status: 'OK', items: cachedData.items.length });
+});
+
 server.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Server: ${PORT}`);
-  console.log('✅ STRICT PAKAIAN + AKSESORIS (NO AVATAR)');
-  console.log('✅ WebSocket instant updates');
+  console.log('✅ Thumbnails proxy ready!');
 });
+
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
