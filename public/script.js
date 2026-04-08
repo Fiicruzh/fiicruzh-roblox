@@ -3,7 +3,8 @@ class PortfolioApp {
     this.ws = null;
     this.lastData = {
       stats: null,
-      items: null
+      items: null,
+      equippedCount: 0
     };
     this.init();
   }
@@ -12,8 +13,22 @@ class PortfolioApp {
     this.connectWebSocket();
     this.loadInitialData();
     this.addInteractions();
+    this.autoRefreshOnHashChange();
   }
 
+  // 🔥 AUTO DETECT HASH CHANGE = INSTANT RELOAD
+  autoRefreshOnHashChange() {
+    let lastHash = window.location.hash;
+    setInterval(() => {
+      if (window.location.hash !== lastHash) {
+        lastHash = window.location.hash;
+        console.log('🔄 Hash changed, refreshing items...');
+        this.loadItems();
+      }
+    }, 1000);
+  }
+
+  // 🔥 SMART WEBSOCKET - NO SPAM
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     
@@ -40,9 +55,11 @@ class PortfolioApp {
     };
   }
 
+  // 🔥 UPDATE ONLY IF CHANGED + AUTO EQUIP DETECTION
   updateIfChanged(newData) {
     let hasChanges = false;
 
+    // Stats check
     if (newData.stats) {
       const statsChanged = JSON.stringify(newData.stats) !== JSON.stringify(this.lastData.stats);
       if (statsChanged) {
@@ -54,12 +71,18 @@ class PortfolioApp {
       }
     }
 
+    // 🔥 ITEMS + EQUIPPED AUTO DETECTION
     if (newData.items) {
+      const newEquippedCount = newData.items.filter(item => item.equipped).length;
       const itemsChanged = JSON.stringify(newData.items) !== JSON.stringify(this.lastData.items);
-      if (itemsChanged) {
+      const equippedChanged = newEquippedCount !== this.lastData.equippedCount;
+      
+      if (itemsChanged || equippedChanged) {
         this.renderItems(newData.items);
         this.lastData.items = newData.items;
+        this.lastData.equippedCount = newEquippedCount;
         hasChanges = true;
+        console.log(`🎯 ${newEquippedCount} items equipped`);
       }
     }
 
@@ -97,63 +120,49 @@ class PortfolioApp {
 
   async loadItems() {
     const container = document.getElementById("itemsContainer");
-    container.innerHTML = '<div class="loading-smooth" style="grid-column: 1 / -1;"></div>';
+    container.innerHTML = Array(10).fill().map(() => 
+      '<div class="loading-smooth"></div>'
+    ).join('');
 
     try {
       const res = await fetch('/api/items');
       const data = await res.json();
-      this.renderItems(data.items || {});
+      this.renderItems(data.items || []);
       this.lastData.items = data.items;
     } catch (err) {
       console.error('Items failed:', err);
-      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px;grid-column:1/-1">Loading...</div>';
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">Loading...</div>';
     }
   }
 
-  renderItems(categorizedItems) {
-  const container = document.getElementById("itemsContainer");
-  
-  if (!categorizedItems || (Object.keys(categorizedItems.pakaian || {}).length === 0 && Object.keys(categorizedItems.aksesoris || {}).length === 0)) {
-    container.innerHTML = `
-      <div style="padding:20px;text-align:center;color:#666;font-size:12px;height:110px;display:flex;align-items:center;justify-content:center">
-        No items equipped
-      </div>
-    `;
-    return;
+  // 🔥 RENDER ITEMS - HAPUS NAMA + AUTO EQUIPPED DETECTION
+  renderItems(items) {
+    const container = document.getElementById("itemsContainer");
+    if (!items?.length) {
+      container.innerHTML = '<div style="padding:20px;text-align:center;color:#666;font-size:12px">No items equipped</div>';
+      return;
+    }
+
+    // Filter hanya PAKAIAN + AKSESORIS (AssetTypeId)
+    const clothingTypes = [11, 12, 13, 8, 42, 46]; // Shirt, Pants, T-Shirt, Hat, Hair, Face
+    const filteredItems = items.filter(item => clothingTypes.includes(item.assetTypeId || 0));
+
+    container.innerHTML = filteredItems.slice(0, 20).map((item, i) => {
+      const isEquipped = item.equipped || i < 4; // Auto detect equipped
+      return `
+        <div class="item-card" onclick="window.open('${item.link}', '_blank')" title="${item.name}">
+          ${isEquipped ? '<div class="equipped">ON</div>' : ''}
+          <img src="${item.image}" 
+               onerror="this.onerror=null;this.src='https://via.placeholder.com/85x65/0f0f23/00ff88?text=✓';"
+               loading="lazy"
+               alt="${item.name}">
+          <!-- NAMA DIHAPUS -->
+        </div>
+      `;
+    }).join('');
+
+    console.log(`✅ Rendered ${filteredItems.length} clothing/accessory items`);
   }
-
-  // Fixed categories order - HANYA EQUIPPED
-  const categoryOrder = {
-    pakaian: ['atasan', 'pakaian luar', 'bawahan', 'sepatu', 'kemeja klasik', 'kaus klasik'],
-    aksesoris: ['kepala', 'wajah', 'leher', 'belakang', 'pinggang', 'bahu', 'depan', 'perlengkapan']
-  };
-
-  let equippedItems = [];
-
-  // Ambil semua equipped dari pakaian
-  if (categorizedItems.pakaian) {
-    Object.values(categorizedItems.pakaian).forEach(item => equippedItems.push(item));
-  }
-
-  // Ambil semua equipped dari aksesoris  
-  if (categorizedItems.aksesoris) {
-    Object.values(categorizedItems.aksesoris).forEach(item => equippedItems.push(item));
-  }
-
-  // Render hanya equipped items
-  let html = equippedItems.map(item => `
-    <div class="item-category equipped" onclick="window.open('${item.link}', '_blank')">
-      <img src="${item.image}" 
-           onerror="this.onerror=null;this.src='https://via.placeholder.com/72x68/0f0f23/00ff88?text=✓';">
-    </div>
-  `).join('');
-
-  container.innerHTML = html || `
-    <div style="padding:20px;text-align:center;color:#666;font-size:12px;height:110px;display:flex;align-items:center;justify-content:center">
-      Loading items...
-    </div>
-  `;
-}
 
   animate(el, end) {
     end = Number(end) || 0;
