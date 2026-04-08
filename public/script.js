@@ -3,8 +3,7 @@ class PortfolioApp {
     this.ws = null;
     this.lastData = {
       stats: null,
-      items: null,
-      equippedCount: 0
+      items: null
     };
     this.init();
   }
@@ -13,29 +12,16 @@ class PortfolioApp {
     this.connectWebSocket();
     this.loadInitialData();
     this.addInteractions();
-    this.autoRefreshOnHashChange();
   }
 
-  // 🔥 AUTO DETECT HASH CHANGE = INSTANT RELOAD
-  autoRefreshOnHashChange() {
-    let lastHash = window.location.hash;
-    setInterval(() => {
-      if (window.location.hash !== lastHash) {
-        lastHash = window.location.hash;
-        console.log('🔄 Hash changed, refreshing items...');
-        this.loadItems();
-      }
-    }, 1000);
-  }
-
-  // 🔥 SMART WEBSOCKET - NO SPAM
+  // 🔥 SMART WEBSOCKET - INSTANT UPDATE
   connectWebSocket() {
     const wsUrl = `${location.protocol === 'https:' ? 'wss' : 'ws'}://${location.host}/websocket`;
     
     this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
-      console.log('✅ WebSocket connected');
+      console.log('✅ WebSocket connected - INSTANT LOAD');
       document.getElementById('liveIndicator').textContent = '🟢';
     };
 
@@ -51,15 +37,15 @@ class PortfolioApp {
     this.ws.onclose = () => {
       console.log('❌ WebSocket disconnected');
       document.getElementById('liveIndicator').textContent = '🔴';
-      setTimeout(() => this.connectWebSocket(), 5000);
+      setTimeout(() => this.connectWebSocket(), 3000); // Faster reconnect
     };
   }
 
-  // 🔥 UPDATE ONLY IF CHANGED + AUTO EQUIP DETECTION
+  // 🔥 AUTO UPDATE ONLY IF CHANGED
   updateIfChanged(newData) {
     let hasChanges = false;
 
-    // Stats check
+    // Stats update
     if (newData.stats) {
       const statsChanged = JSON.stringify(newData.stats) !== JSON.stringify(this.lastData.stats);
       if (statsChanged) {
@@ -71,28 +57,24 @@ class PortfolioApp {
       }
     }
 
-    // 🔥 ITEMS + EQUIPPED AUTO DETECTION
+    // Items update - INSTANT REFRESH
     if (newData.items) {
-      const newEquippedCount = newData.items.filter(item => item.equipped).length;
       const itemsChanged = JSON.stringify(newData.items) !== JSON.stringify(this.lastData.items);
-      const equippedChanged = newEquippedCount !== this.lastData.equippedCount;
-      
-      if (itemsChanged || equippedChanged) {
+      if (itemsChanged) {
         this.renderItems(newData.items);
         this.lastData.items = newData.items;
-        this.lastData.equippedCount = newEquippedCount;
         hasChanges = true;
-        console.log(`🎯 ${newEquippedCount} items equipped`);
+        console.log('🎯 Items auto-updated:', newData.items.length);
       }
     }
 
     if (hasChanges) {
       document.getElementById('liveIndicator').textContent = '🟢';
-      console.log('✅ Data updated');
     }
   }
 
   async loadInitialData() {
+    // Avatar INSTANT
     try {
       const res = await fetch('/api/avatar');
       const data = await res.json();
@@ -101,7 +83,10 @@ class PortfolioApp {
       console.error('Avatar load failed');
     }
 
+    // Stats
     this.loadStats();
+
+    // Items - INSTANT LOAD
     this.loadItems();
   }
 
@@ -135,7 +120,7 @@ class PortfolioApp {
     }
   }
 
-  // 🔥 RENDER ITEMS - HAPUS NAMA + AUTO EQUIPPED DETECTION
+  // 🔥 RENDER ITEMS - NO NAME + ONLY PAKAIAN/AKSESORIS + 4 EQUIPPED
   renderItems(items) {
     const container = document.getElementById("itemsContainer");
     if (!items?.length) {
@@ -143,25 +128,19 @@ class PortfolioApp {
       return;
     }
 
-    // Filter hanya PAKAIAN + AKSESORIS (AssetTypeId)
-    const clothingTypes = [11, 12, 13, 8, 42, 46]; // Shirt, Pants, T-Shirt, Hat, Hair, Face
-    const filteredItems = items.filter(item => clothingTypes.includes(item.assetTypeId || 0));
-
-    container.innerHTML = filteredItems.slice(0, 20).map((item, i) => {
-      const isEquipped = item.equipped || i < 4; // Auto detect equipped
+    // Show first 4 as EQUIPPED, rest normal
+    container.innerHTML = items.map((item, i) => {
+      const isEquipped = i < 4;
       return `
-        <div class="item-card" onclick="window.open('${item.link}', '_blank')" title="${item.name}">
+        <div class="item-card" onclick="window.open('${item.link}', '_blank')">
           ${isEquipped ? '<div class="equipped">ON</div>' : ''}
           <img src="${item.image}" 
                onerror="this.onerror=null;this.src='https://via.placeholder.com/85x65/0f0f23/00ff88?text=✓';"
                loading="lazy"
-               alt="${item.name}">
-          <!-- NAMA DIHAPUS -->
+               alt="Item">
         </div>
       `;
     }).join('');
-
-    console.log(`✅ Rendered ${filteredItems.length} clothing/accessory items`);
   }
 
   animate(el, end) {
