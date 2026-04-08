@@ -21,32 +21,26 @@ app.use(express.static(path.join(__dirname, "public")));
 const USER_ID = 8941948601;
 let cachedData = {
   stats: { friends: 0, followers: 0, following: 0 },
-  items: {},
-  lastItemHash: null,  // 🔥 HASH UNTUK DETECT PERUBAHAN
+  items: [],
   lastUpdate: 0
 };
 
-const CACHE_DURATION = 10000; // 10 detik - CEPAT DETECT
+const CACHE_DURATION = 30000; // 30 detik - lebih cepat update
 
-async function fetchWithRetry(url, retries = 3, delay = 800) {
+async function fetchWithRetry(url, retries = 2, delay = 1000) {
   for (let i = 0; i < retries; i++) {
     try {
       const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 6000);
+      const timeoutId = setTimeout(() => controller.abort(), 8000);
       const response = await fetch(url, { signal: controller.signal });
       clearTimeout(timeoutId);
       if (response?.ok) return response;
     } catch (err) {
       if (i === retries - 1) return null;
-      await new Promise(r => setTimeout(r, delay * (i + 1)));
+      await new Promise(r => setTimeout(r, delay));
     }
   }
   return null;
-}
-
-// 🔥 HASH GENERATOR UNTUK DETECT PERUBAHAN
-function generateHash(items) {
-  return JSON.stringify(items).slice(0, 50);
 }
 
 // STATS
@@ -99,123 +93,131 @@ app.get("/api/avatar", async (req, res) => {
   }
 });
 
-// 🔥 AUTO DETECT ITEM CHANGES + FORCE REFRESH
+// 🔥 ITEMS API - HANYA PAKAIAN + AKSESORIS + AssetTypeId Filter
 app.get("/api/items", async (req, res) => {
   try {
-    console.log('🔥 Checking items...');
-    
-    // SELALU FETCH FRESH DATA UNTUK DETECT PERUBAHAN
+    const now = Date.now();
+    if (now - cachedData.lastUpdate < CACHE_DURATION && cachedData.items.length > 0) {
+      return res.json({ items: cachedData.items });
+    }
+
+    console.log('🔥 Loading PAKAIAN + AKSESORIS items...');
+
+    // 1. Get CURRENTLY WEARING (PAKAIAN SAAT INI)
+    let wearData = { assetIds: [] };
     const wearRes = await fetchWithRetry(`https://avatar.roblox.com/v1/users/${USER_ID}/currently-wearing`);
-    if (!wearRes) {
-      return res.json({ items: cachedData.items });
-    }
+    if (wearRes) wearData = await wearRes.json();
+
+    let equippedIds = wearData.assetIds?.filter(id => id) || [];
     
-    const wearData = await wearRes.json();
-    const currentHash = generateHash(wearData.assetIds || []);
-    
-    console.log(`📦 Current hash: ${currentHash.slice(0,12)} | Cached: ${cachedData.lastItemHash?.slice(0,12)}`);
-    
-    // 🔥 JIKA HASH BERUBAH = FORCE REFRESH
-    const hasChanged = currentHash !== cachedData.lastItemHash;
-    
-    if (!hasChanged && Date.now() - cachedData.lastUpdate < CACHE_DURATION) {
-      console.log('✅ Using cache - no changes');
-      return res.json({ items: cachedData.items });
-    }
-
-    console.log(hasChanged ? '🔄 ITEMS CHANGED - REFRESHING!' : '🔄 Cache expired - refreshing...');
-
-    // Get equipped items dengan type mapping
-    let equippedItems = [];
-    if (wearData.assetIds && wearData.assetIds.length > 0) {
-      const detailsPromises = wearData.assetIds.slice(0, 20).map(async (assetId) => {
-        try {
-          const detailRes = await fetchWithRetry(`https://economy.roblox.com/v2/assets/${assetId}/details`, 1);
-          if (detailRes) {
-            const detail = await detailRes.json();
-            return {
-              id: assetId,
-              name: detail.Name || `Item #${assetId}`,
-              type: detail.AssetTypeId || 0
-            };
-          }
-        } catch (e) {}
-        return null;
-      });
-
-      equippedItems = (await Promise.all(detailsPromises)).filter(Boolean);
-    }
-
-    // Category mapping berdasarkan AssetTypeId Roblox
-    const categoryMap = {
-      // PAKAIAN
-      11: 'atasan',      // Shirt
-      12: 'atasan',      // T-Shirt  
-      2: 'bawahan',      // Pants
-      8: 'sepatu',       // Shoes (fix)
-      46: 'kemeja klasik', 
-      47: 'kaus klasik', 
-      
-      // AKSESORIS
-      1: 'kepala',       // Hat
-      41: 'wajah',       // Face
-      42: 'leher',       // Neck
-      43: 'belakang',    // Back
-      44: 'pinggang',    // Waist
-      45: 'bahu',        // Shoulder
-      49: 'depan',       // Front
-      50: 'perlengkapan' // Gear
-    };
-
-    // Categorize items
-    const categorized = {
-      pakaian: {},
-      aksesoris: {}
-    };
-
-    // Batch thumbnails
-    const assetIds = equippedItems.map(item => item.id);
-    let thumbs = {};
-    if (assetIds.length > 0) {
-      const thumbRes = await fetchWithRetry(
-        `https://thumbnails.roblox.com/v1/assets?assetIds=${assetIds.join(',')}&size=150x150&format=Png`
-      );
-      if (thumbRes) {
-        const thumbData = await thumbRes.json();
-        thumbData.data?.forEach(t => {
-          thumbs[t.targetId] = t.imageUrl;
+    // 2. Backup dari inventory/outfit
+    if (equippedIds.length < 10) {
+      const inventoryRes = await fetchWithRetry(`https://inventory.roblox.com/v1/users/${USER_ID}/assets/collectibles?sortOrder=Asc&limit=30`);
+      if (inventoryRes) {
+        const inventory = await inventoryRes.json();
+        inventory.data?.forEach(item => {
+          if (item.assetId) equippedIds.push(item.assetId);
         });
       }
     }
 
-    equippedItems.forEach(item => {
-      const category = categoryMap[item.type];
-      if (category) {
-        const section = ['atasan', 'bawahan', 'sepatu', 'kemeja klasik', 'kaus klasik'].includes(category) 
-          ? 'pakaian' : 'aksesoris';
-        
-        if (!categorized[section][category]) {
-          categorized[section][category] = {
-            id: item.id,
-            image: thumbs[item.id] || `https://www.roblox.com/asset-thumbnail/image?assetId=${item.id}&width=150&height=150&format=png`,
-            link: `https://www.roblox.com/catalog/${item.id}/item`
-          };
-        }
-      }
-    });
+    equippedIds = [...new Set(equippedIds)].slice(0, 25);
+    console.log(`🎒 Found ${equippedIds.length} asset IDs`);
 
-    // 🔥 UPDATE CACHE + HASH
-    cachedData.items = categorized;
-    cachedData.lastItemHash = currentHash;
-    cachedData.lastUpdate = Date.now();
-    
-    console.log(`✅ REFRESHED! Pakaian: ${Object.keys(categorized.pakaian).length} | Aksesoris: ${Object.keys(categorized.aksesoris).length}`);
-    broadcast({ items: categorized });
-    res.json({ items: categorized });
+    if (!equippedIds.length) return res.json({ items: [] });
+
+    // 🔥 BATCH THUMBNAILS + ASSET DETAILS
+    const [thumbRes, detailPromises] = await Promise.all([
+      fetchWithRetry(`https://thumbnails.roblox.com/v1/assets?assetIds=${equippedIds.join(',')}&size=150x150&format=Png`),
+      Promise.all(equippedIds.map(id => 
+        fetchWithRetry(`https://economy.roblox.com/v2/assets/${id}/details`)
+          .then(res => res?.ok ? res.json() : null)
+      ))
+    ]);
+
+    let thumbs = {};
+    if (thumbRes) {
+      const thumbData = await thumbRes.json();
+      thumbData.data?.forEach(t => {
+        thumbs[t.targetId] = t.imageUrl;
+      });
+    }
+
+    // 🔥 BUILD ITEMS - HANYA PAKAIAN + AKSESORIS
+    const clothingTypes = [2, 8, 11, 12, 13, 27, 41, 42, 46, 47, 48]; // Shirt, Pants, Hat, Hair, Face, etc
+    const items = [];
+
+    for (let i = 0; i < equippedIds.length; i++) {
+      const assetId = equippedIds[i];
+      const details = detailPromises[i];
+      
+      try {
+        let assetTypeId = 0;
+        let name = `Item #${assetId}`;
+        let equipped = i < wearData.assetIds?.length; // First items = equipped
+
+        if (details) {
+          assetTypeId = details.AssetTypeId || 0;
+          name = details.Name || name;
+          equipped = wearData.assetIds?.includes(assetId) || false;
+        }
+
+        // 🎯 FILTER HANYA PAKAIAN + AKSESORIS
+        if (!clothingTypes.includes(assetTypeId)) continue;
+
+        const imageUrls = [
+          thumbs[assetId],
+          `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`,
+          `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`,
+          `https://via.placeholder.com/85x65/0f0f23/00ff88?text=✓`
+        ];
+
+        items.push({
+          id: assetId,
+          name: name.substring(0, 20),
+          image: imageUrls[0] || imageUrls[1] || imageUrls[2],
+          link: `https://www.roblox.com/catalog/${assetId}/item`,
+          assetTypeId: assetTypeId,
+          equipped: equipped
+        });
+
+      } catch (e) {
+        console.warn(`Failed item ${assetId}:`, e.message);
+      }
+    }
+
+    cachedData.items = items;
+    cachedData.lastUpdate = now;
+    console.log(`✅ ${items.length} PAKAIAN+AKSESORIS items ready (${items.filter(i => i.equipped).length} equipped)`);
+    broadcast({ items });
+    res.json({ items });
 
   } catch (err) {
     console.error('Items error:', err.message);
-    res.json({ items: cachedData.items || {} });
+    res.json({ items: cachedData.items || [] });
+  }
+});
+
+// THUMBNAIL PROXY
+app.get("/thumbnail/:assetId", async (req, res) => {
+  try {
+    const { assetId } = req.params;
+    const url = `https://thumbnails.roblox.com/v1/assets?assetIds=${assetId}&size=150x150&format=Png`;
+    const thumbRes = await fetchWithRetry(url);
+    
+    if (thumbRes) {
+      const thumbs = await thumbRes.json();
+      const imageUrl = thumbs?.data?.[0]?.imageUrl;
+      if (imageUrl) {
+        res.redirect(302, imageUrl);
+        return;
+      }
+    }
+    
+    res.redirect(302, `https://www.roblox.com/asset-thumbnail/image?assetId=${assetId}&width=150&height=150&format=png`);
+    
+  } catch (err) {
+    res.redirect(302, 'https://via.placeholder.com/85x65/333/fff?text=ROBLOX');
   }
 });
 
@@ -229,27 +231,24 @@ function broadcast(data) {
 }
 
 wss.on('connection', (ws) => {
-  console.log('👤 Connected');
+  console.log('👤 Client connected');
   ws.send(JSON.stringify(cachedData));
-  ws.on('close', () => console.log('👋 Disconnected'));
+  ws.on('close', () => console.log('👋 Client disconnected'));
 });
 
-// SPA
+// SPA ROUTING
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'OK', 
-    items: Object.keys(cachedData.items || {}).length,
-    lastHash: cachedData.lastItemHash?.slice(0,12),
-    changed: cachedData.lastItemHash ? '✅' : '⏳'
-  });
+  res.json({ status: 'OK', items: cachedData.items.length, timestamp: new Date().toISOString() });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`🚀 Server: http://localhost:${PORT}`);
-  console.log('✅ AUTO ITEM DETECTION READY!');
-  console.log('🔥 Changes detected = INSTANT REFRESH');
+  console.log(`🚀 Server running on port ${PORT}`);
+  console.log('✅ PAKAIAN + AKSESORIS filter ready!');
+  console.log('🟢 WebSocket live updates enabled!');
 });
+
+process.on('SIGTERM', () => server.close(() => process.exit(0)));
