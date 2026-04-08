@@ -111,57 +111,49 @@ class PortfolioApp {
   }
 
   renderItems(categorizedItems) {
-    const container = document.getElementById("itemsContainer");
-    
-    if (!categorizedItems || Object.keys(categorizedItems).length === 0) {
-      container.innerHTML = `
-        <div style="grid-column:1/-1;padding:20px;text-align:center;color:#666;font-size:12px">
-          No items equipped
-        </div>
-      `;
-      return;
-    }
-
-    // Fixed categories order
-    const categoryOrder = {
-      pakaian: ['atasan', 'pakaian luar', 'bawahan', 'sepatu', 'kemeja klasik', 'kaus klasik'],
-      aksesoris: ['kepala', 'wajah', 'leher', 'belakang', 'pinggang', 'bahu', 'depan', 'perlengkapan']
-    };
-
-    let html = '';
-
-    // Pakaian (6 slots)
-    categoryOrder.pakaian.forEach(cat => {
-      const item = categorizedItems.pakaian?.[cat];
-      if (item) {
-        html += `
-          <div class="item-category equipped" onclick="window.open('${item.link}', '_blank')">
-            <img src="${item.image}" 
-                 onerror="this.onerror=null;this.src='https://via.placeholder.com/70x60/0f0f23/00ff88?text=✓';">
-          </div>
-        `;
-      } else {
-        html += '<div class="item-category empty"><div>-</div></div>';
-      }
-    });
-
-    // Aksesoris (8 slots)
-    categoryOrder.aksesoris.forEach(cat => {
-      const item = categorizedItems.aksesoris?.[cat];
-      if (item) {
-        html += `
-          <div class="item-category equipped" onclick="window.open('${item.link}', '_blank')">
-            <img src="${item.image}" 
-                 onerror="this.onerror=null;this.src='https://via.placeholder.com/70x60/0f0f23/00ff88?text=✓';">
-          </div>
-        `;
-      } else {
-        html += '<div class="item-category empty"><div>-</div></div>';
-      }
-    });
-
-    container.innerHTML = html;
+  const container = document.getElementById("itemsContainer");
+  
+  if (!categorizedItems || (Object.keys(categorizedItems.pakaian || {}).length === 0 && Object.keys(categorizedItems.aksesoris || {}).length === 0)) {
+    container.innerHTML = `
+      <div style="padding:20px;text-align:center;color:#666;font-size:12px;height:110px;display:flex;align-items:center;justify-content:center">
+        No items equipped
+      </div>
+    `;
+    return;
   }
+
+  // Fixed categories order - HANYA EQUIPPED
+  const categoryOrder = {
+    pakaian: ['atasan', 'pakaian luar', 'bawahan', 'sepatu', 'kemeja klasik', 'kaus klasik'],
+    aksesoris: ['kepala', 'wajah', 'leher', 'belakang', 'pinggang', 'bahu', 'depan', 'perlengkapan']
+  };
+
+  let equippedItems = [];
+
+  // Ambil semua equipped dari pakaian
+  if (categorizedItems.pakaian) {
+    Object.values(categorizedItems.pakaian).forEach(item => equippedItems.push(item));
+  }
+
+  // Ambil semua equipped dari aksesoris  
+  if (categorizedItems.aksesoris) {
+    Object.values(categorizedItems.aksesoris).forEach(item => equippedItems.push(item));
+  }
+
+  // Render hanya equipped items
+  let html = equippedItems.map(item => `
+    <div class="item-category equipped" onclick="window.open('${item.link}', '_blank')">
+      <img src="${item.image}" 
+           onerror="this.onerror=null;this.src='https://via.placeholder.com/72x68/0f0f23/00ff88?text=✓';">
+    </div>
+  `).join('');
+
+  container.innerHTML = html || `
+    <div style="padding:20px;text-align:center;color:#666;font-size:12px;height:110px;display:flex;align-items:center;justify-content:center">
+      Loading items...
+    </div>
+  `;
+}
 
   animate(el, end) {
     end = Number(end) || 0;
